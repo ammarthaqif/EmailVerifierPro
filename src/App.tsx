@@ -11,6 +11,7 @@ import { AiInsightsBanner } from './components/AiInsightsBanner';
 import { ColumnMappingBar } from './components/ColumnMappingBar';
 import { WhatsAppTemplateModal } from './components/WhatsAppTemplateModal';
 import { WhatsAppSendModal } from './components/WhatsAppSendModal';
+import { UserGuideModal } from './components/UserGuideModal';
 import {
   EmailRecord,
   VerificationResult,
@@ -40,6 +41,8 @@ import {
   Sparkles,
   SlidersHorizontal,
   MessageSquare,
+  BookOpen,
+  ShieldCheck,
 } from 'lucide-react';
 
 const STORAGE_KEY_TEMPLATE = 'mailverify_whatsapp_template_v1';
@@ -99,6 +102,7 @@ export default function App() {
   // Diagnostic & Export Modals
   const [inspectRecord, setInspectRecord] = useState<EmailRecord | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isUserGuideOpen, setIsUserGuideOpen] = useState(false);
 
   // Save WhatsApp template changes to localStorage
   const handleSaveWhatsAppTemplate = (newText: string, countryCode: string) => {
@@ -492,6 +496,7 @@ export default function App() {
         isVerifying={isVerifying}
         totalRecords={records.length}
         onOpenWhatsAppTemplate={() => setIsWhatsAppTemplateModalOpen(true)}
+        onOpenUserGuide={() => setIsUserGuideOpen(true)}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -505,9 +510,17 @@ export default function App() {
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 mb-2">
                 Excel Email Verification & Director WhatsApp Outreach
               </h1>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-600 mb-3">
                 Upload your company spreadsheet with director or owner names, corporate emails, phone numbers, and addresses. Verify deliverability, flag invalid addresses, and send prescripted WhatsApp messages with automatic data interpolation.
               </p>
+              <button
+                onClick={() => setIsUserGuideOpen(true)}
+                id="btn-hero-user-guide"
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-full border border-blue-200 transition-colors shadow-2xs cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                <span>New here? Read the User Manual & Best Practice Guide</span>
+              </button>
             </div>
 
             <FileUploadZone
@@ -649,6 +662,48 @@ export default function App() {
         filteredCount={filteredRecords.length}
         fileName={sheetData?.fileName || 'clean_records.xlsx'}
       />
+
+      {/* Interactive User Manual & Guide Modal */}
+      <UserGuideModal
+        isOpen={isUserGuideOpen}
+        onClose={() => setIsUserGuideOpen(false)}
+        onLoadSample={handleLoadSample}
+      />
+
+      {/* Dashboard Footer with Signature */}
+      <footer
+        id="app-footer"
+        className="mt-12 py-6 border-t border-slate-200 bg-white/90 backdrop-blur-xs text-xs text-slate-500"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
+            <span className="font-semibold text-slate-800">Email Verifier & Director Outreach Suite</span>
+            <span className="text-slate-300 hidden sm:inline">•</span>
+            <span className="text-slate-500">Automated DNS Hygiene & WhatsApp Automation</span>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap justify-center">
+            <button
+              onClick={() => setIsUserGuideOpen(true)}
+              id="footer-btn-user-guide"
+              className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-medium hover:underline cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>User Manual & Guide</span>
+            </button>
+            <span className="text-slate-300">•</span>
+            <div
+              id="dashboard-developer-signature"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-200/90 shadow-2xs"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              <span>
+                Developed by <strong className="text-slate-900 font-bold">Ammar Thaqif</strong>
+              </span>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
