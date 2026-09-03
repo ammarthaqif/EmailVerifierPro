@@ -12,8 +12,10 @@ import {
   Tag,
   AlertOctagon,
   Clock,
+  Wand2,
 } from 'lucide-react';
 import { EmailRecord } from '../types';
+import { useTheme } from '../context/ThemeContext';
 
 interface DiagnosticModalProps {
   record: EmailRecord | null;
@@ -26,156 +28,180 @@ export const DiagnosticModal: React.FC<DiagnosticModalProps> = ({
   onClose,
   onFixTypo,
 }) => {
+  const { isDark, themeConfig } = useTheme();
+
   if (!record) return null;
 
   const res = record.verification;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div
+        className={`rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border animate-in fade-in zoom-in-95 duration-150 ${
+          isDark
+            ? 'bg-slate-900 border-slate-800 text-slate-100'
+            : 'bg-white border-slate-200 text-slate-900'
+        }`}
+      >
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/90">
+        <div
+          className={`px-4 sm:px-6 py-3.5 sm:py-4 border-b flex items-center justify-between ${
+            isDark ? 'bg-slate-850 border-slate-800' : 'bg-slate-50/90 border-slate-200'
+          }`}
+        >
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-100/80 text-blue-600 flex items-center justify-center shadow-xs">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-white shadow-xs"
+              style={{ backgroundColor: themeConfig.accentColor }}
+            >
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">
-                Email Diagnostics & Verification Report
+              <h3 className="font-bold text-xs sm:text-sm">
+                Email Diagnostics & DNS Verification Report
               </h3>
-              <p className="text-xs text-slate-500 font-mono">Row #{record.rowIndex}</p>
+              <p className={`text-xs font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Row #{record.rowIndex}
+              </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+              isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+            }`}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 max-h-[75vh] overflow-y-auto">
           {/* Target Email & Status Card */}
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div
+            className={`p-3.5 sm:p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs ${
+              isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-50 border-slate-200/90'
+            }`}
+          >
             <div>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                Target Address
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Tested Target Email
               </span>
-              <span className="text-base font-mono font-bold text-slate-900">
+              <div className="font-mono text-sm sm:text-base font-bold text-blue-600 dark:text-blue-400 mt-0.5 break-all">
                 {record.currentEmail}
-              </span>
-              {record.typoFixed && (
-                <span className="ml-2 text-xs text-emerald-700 font-bold">
-                  (Corrected from {record.originalEmail})
-                </span>
+              </div>
+              {record.originalEmail !== record.currentEmail && (
+                <p className="text-xs text-slate-400 line-through mt-0.5 font-mono">
+                  Originally: {record.originalEmail}
+                </p>
               )}
             </div>
 
             {res && (
               <div className="flex items-center gap-2">
-                <div
-                  className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 shadow-xs ${
+                <span
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
                     res.status === 'valid'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      ? isDark
+                        ? 'bg-emerald-950/90 text-emerald-300 border-emerald-800'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-300'
                       : res.status === 'risky'
-                      ? 'bg-amber-50 text-amber-700 border-amber-200'
-                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                      ? isDark
+                        ? 'bg-amber-950/90 text-amber-300 border-amber-800'
+                        : 'bg-amber-50 text-amber-700 border-amber-300'
+                      : isDark
+                      ? 'bg-rose-950/90 text-rose-300 border-rose-800'
+                      : 'bg-rose-50 text-rose-700 border-rose-300'
                   }`}
                 >
-                  {res.status === 'valid' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-                  {res.status === 'risky' && <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />}
-                  {res.status === 'invalid' && <XCircle className="w-3.5 h-3.5 text-rose-600" />}
-                  <span>{res.status.toUpperCase()} ({res.deliverabilityScore}%)</span>
-                </div>
+                  {res.status === 'valid' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                  {res.status === 'risky' && <AlertTriangle className="w-4 h-4 text-amber-500" />}
+                  {res.status === 'invalid' && <XCircle className="w-4 h-4 text-rose-500" />}
+                  <span className="capitalize">{res.status}</span>
+                  <span className="font-mono">({res.deliverabilityScore}%)</span>
+                </span>
               </div>
             )}
           </div>
 
+          {/* Typo Correction Prompt */}
+          {res?.typoSuggestion && !record.typoFixed && (
+            <div
+              className={`p-3 sm:p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                isDark
+                  ? 'bg-amber-950/40 border-amber-800 text-amber-200'
+                  : 'bg-amber-50/80 border-amber-200 text-amber-900'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Wand2 className="w-5 h-5 text-amber-500 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold">Recommended Typo Correction</h4>
+                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                    Domain appears misspelled. Replace with <strong className="font-mono font-bold text-amber-900 dark:text-amber-200">{res.typoSuggestion}</strong>?
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  onFixTypo(record);
+                  onClose();
+                }}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs shrink-0 min-h-[38px]"
+              >
+                Apply Correction
+              </button>
+            </div>
+          )}
+
+          {/* Technical Diagnostics */}
           {res ? (
             <>
-              {/* Detailed Reason Explanation */}
-              <div className="p-3.5 rounded-lg bg-blue-50/60 border border-blue-100 text-xs text-slate-700">
-                <strong className="text-blue-900 font-bold block mb-1">
-                  Summary: {res.reason}
-                </strong>
-                <p className="text-slate-700 leading-relaxed font-normal">{res.explanation}</p>
-              </div>
-
-              {/* Typo Recommendation Alert */}
-              {res.typoSuggestion && !record.typoFixed && (
-                <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-xs flex items-center justify-between gap-3 shadow-xs">
-                  <div>
-                    <strong className="text-amber-900 font-bold block">Domain Typo Detected</strong>
-                    <span className="text-amber-800 font-medium">
-                      Did you mean <code className="font-bold font-mono text-amber-950">{res.typoSuggestion}</code>?
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      onFixTypo(record);
-                      onClose();
-                    }}
-                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold rounded-lg shadow-xs transition-colors cursor-pointer shrink-0"
-                  >
-                    Apply Fix
-                  </button>
-                </div>
-              )}
-
-              {/* Comprehensive Check Breakdown */}
               <div>
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2.5">
-                  Diagnostic Check Matrix
+                <h4 className={`text-xs font-bold uppercase tracking-wider mb-2.5 flex items-center gap-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
+                  <Server className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Technical Verification Attributes</span>
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  {/* Syntax Check */}
-                  <div className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between shadow-2xs">
-                    <span className="text-slate-600 font-medium">RFC 5322 Syntax Format</span>
-                    <span className={`font-bold flex items-center gap-1 ${res.syntaxValid ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {res.syntaxValid ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <XCircle className="w-3.5 h-3.5 text-rose-600" />}
-                      {res.syntaxValid ? 'Valid' : 'Malformed'}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 text-xs">
+                  <div className={`p-3 rounded-lg border ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className="text-slate-400 block text-[11px]">RFC Syntax Check</span>
+                    <span className={`font-bold mt-1 inline-flex items-center gap-1 ${res.syntaxValid ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      {res.syntaxValid ? 'Passed' : 'Failed'}
                     </span>
                   </div>
 
-                  {/* MX Record Status */}
-                  <div className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between shadow-2xs">
-                    <span className="text-slate-600 font-medium">DNS MX Mail Servers</span>
-                    <span className={`font-bold flex items-center gap-1 ${res.hasMxRecords ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {res.hasMxRecords ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <XCircle className="w-3.5 h-3.5 text-rose-600" />}
-                      {res.hasMxRecords ? 'Active MX Found' : 'No MX Found'}
+                  <div className={`p-3 rounded-lg border ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className="text-slate-400 block text-[11px]">Domain MX Server</span>
+                    <span className={`font-bold mt-1 inline-flex items-center gap-1 ${res.hasMxRecords ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      {res.hasMxRecords ? 'Active Records' : 'No MX Found'}
                     </span>
                   </div>
 
-                  {/* Disposable Check */}
-                  <div className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between shadow-2xs">
-                    <span className="text-slate-600 font-medium">Disposable / Burner Mailbox</span>
-                    <span className={`font-bold flex items-center gap-1 ${res.isDisposable ? 'text-rose-700' : 'text-emerald-700'}`}>
-                      {res.isDisposable ? <AlertOctagon className="w-3.5 h-3.5 text-rose-600" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-                      {res.isDisposable ? 'Disposable (Trap)' : 'Not Disposable'}
+                  <div className={`p-3 rounded-lg border ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className="text-slate-400 block text-[11px]">Disposable / Burner</span>
+                    <span className={`font-bold mt-1 inline-flex items-center gap-1 ${res.isDisposable ? 'text-rose-500' : 'text-emerald-500'}`}>
+                      {res.isDisposable ? 'Disposable' : 'Legitimate'}
                     </span>
                   </div>
 
-                  {/* Role Account Check */}
-                  <div className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between shadow-2xs">
-                    <span className="text-slate-600 font-medium">Role-Based Account</span>
-                    <span className={`font-bold flex items-center gap-1 ${res.isRoleBased ? 'text-amber-700' : 'text-slate-700'}`}>
-                      {res.isRoleBased ? <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-                      {res.isRoleBased ? 'Role / Department' : 'Personal / Named'}
+                  <div className={`p-3 rounded-lg border ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className="text-slate-400 block text-[11px]">Role / Generic Account</span>
+                    <span className={`font-bold mt-1 ${res.isRoleBased ? 'text-amber-500' : 'text-emerald-500'}`}>
+                      {res.isRoleBased ? 'Role Based' : 'Personal / Direct'}
                     </span>
                   </div>
 
-                  {/* Mail Provider */}
-                  <div className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between shadow-2xs">
-                    <span className="text-slate-600 font-medium">Identified Provider</span>
-                    <span className="font-bold text-slate-800">{res.provider}</span>
+                  <div className={`p-3 rounded-lg border ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className="text-slate-400 block text-[11px]">Free Webmail Provider</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300 mt-1 block">
+                      {res.isFreeMail ? 'Free Provider' : 'Corporate / Custom'}
+                    </span>
                   </div>
 
-                  {/* Free vs Corporate */}
-                  <div className="p-3 rounded-lg border border-slate-200 bg-white flex items-center justify-between shadow-2xs">
-                    <span className="text-slate-600 font-medium">Domain Type</span>
-                    <span className="font-bold text-slate-800">
-                      {res.isFreeMail ? 'Free Webmail (Public)' : 'Custom / Corporate Domain'}
+                  <div className={`p-3 rounded-lg border ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                    <span className="text-slate-400 block text-[11px]">Identified Provider</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block truncate">
+                      {res.provider}
                     </span>
                   </div>
                 </div>
@@ -184,11 +210,11 @@ export const DiagnosticModal: React.FC<DiagnosticModalProps> = ({
               {/* Resolved MX Host Records */}
               {res.mxRecords && res.mxRecords.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <Server className="w-3.5 h-3.5 text-slate-500" />
+                  <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
+                    <Server className="w-3.5 h-3.5 text-slate-400" />
                     <span>Resolved DNS MX Server Entries</span>
                   </h4>
-                  <div className="bg-slate-900 text-slate-100 rounded-lg p-3 text-xs font-mono overflow-x-auto space-y-1 shadow-inner">
+                  <div className="bg-slate-950 text-slate-100 rounded-lg p-3 text-xs font-mono overflow-x-auto space-y-1 shadow-inner border border-slate-800">
                     {res.mxRecords.map((mx, idx) => (
                       <div key={idx} className="flex items-center justify-between gap-4">
                         <span className="text-slate-300 font-medium">{mx.exchange}</span>
@@ -201,22 +227,22 @@ export const DiagnosticModal: React.FC<DiagnosticModalProps> = ({
             </>
           ) : (
             <div className="p-8 text-center text-slate-400 text-sm">
-              <Clock className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+              <Clock className="w-8 h-8 mx-auto mb-2 text-slate-400" />
               <p>This row has not been verified yet.</p>
             </div>
           )}
 
           {/* Original Row Data from Excel */}
           <div>
-            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <FileCode className="w-3.5 h-3.5 text-slate-500" />
+            <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
+              <FileCode className="w-3.5 h-3.5 text-slate-400" />
               <span>Original Excel Spreadsheet Data</span>
             </h4>
-            <div className="bg-slate-50 border border-slate-200/90 rounded-lg p-3 text-xs space-y-1.5">
+            <div className={`border rounded-lg p-3 text-xs space-y-1.5 ${isDark ? 'bg-slate-800/60 border-slate-700 text-slate-300' : 'bg-slate-50 border-slate-200/90 text-slate-800'}`}>
               {Object.entries(record.rawData).map(([key, val]) => (
-                <div key={key} className="flex items-baseline justify-between border-b border-slate-200/50 pb-1 last:border-0 last:pb-0">
-                  <span className="font-semibold text-slate-600">{key}:</span>
-                  <span className="font-mono text-slate-800 text-right">{String(val || '')}</span>
+                <div key={key} className={`flex items-baseline justify-between border-b pb-1 last:border-0 last:pb-0 ${isDark ? 'border-slate-700/60' : 'border-slate-200/50'}`}>
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">{key}:</span>
+                  <span className="font-mono text-right truncate max-w-[240px] sm:max-w-md">{String(val || '')}</span>
                 </div>
               ))}
             </div>
@@ -224,10 +250,12 @@ export const DiagnosticModal: React.FC<DiagnosticModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3.5 bg-slate-50/90 border-t border-slate-200 flex justify-end">
+        <div className={`px-4 sm:px-6 py-3.5 border-t flex justify-end ${isDark ? 'bg-slate-850 border-slate-800' : 'bg-slate-50/90 border-slate-200'}`}>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 active:bg-slate-400/70 text-slate-800 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer min-h-[38px] ${
+              isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+            }`}
           >
             Close
           </button>

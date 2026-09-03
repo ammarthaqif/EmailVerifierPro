@@ -82,3 +82,13 @@ export interface FilterState {
   maxScore: number;
 }
 
+export type DashboardTheme = 'slate' | 'midnight' | 'emerald' | 'sapphire' | 'amber';
+
+export interface ThemeConfig {
+  id: DashboardTheme;
+  name: string;
+  isDark: boolean;
+  accentColor: string;
+  bgClass: string;
+}
+

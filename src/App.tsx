@@ -12,6 +12,7 @@ import { ColumnMappingBar } from './components/ColumnMappingBar';
 import { WhatsAppTemplateModal } from './components/WhatsAppTemplateModal';
 import { WhatsAppSendModal } from './components/WhatsAppSendModal';
 import { UserGuideModal } from './components/UserGuideModal';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import {
   EmailRecord,
   VerificationResult,
@@ -64,7 +65,15 @@ const setSafeLocalStorage = (key: string, value: string): void => {
   }
 };
 
-export default function App() {
+function DashboardApp() {
+  const { isDark } = useTheme();
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 'cards';
+    }
+    return 'table';
+  });
+
   const [sheetData, setSheetData] = useState<ParsedSheetData | null>(null);
   const [records, setRecords] = useState<EmailRecord[]>([]);
   const [mappings, setMappings] = useState<ColumnMappings>({
@@ -488,7 +497,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
+    <div
+      className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
+        isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+      }`}
+    >
       <Navbar
         onLoadSample={handleLoadSample}
         onReset={handleReset}
@@ -499,26 +512,38 @@ export default function App() {
         onOpenUserGuide={() => setIsUserGuideOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         {/* Quick single email tester bar */}
         <SingleVerifyWidget />
 
         {!sheetData ? (
           /* Empty State: Upload / Ingestion Screen */
           <div>
-            <div className="text-center max-w-2xl mx-auto mb-6">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 mb-2">
+            <div className="text-center max-w-2xl mx-auto mb-6 px-2">
+              <h1
+                className={`text-xl sm:text-3xl font-bold tracking-tight mb-2 ${
+                  isDark ? 'text-white' : 'text-slate-900'
+                }`}
+              >
                 Excel Email Verification & Director WhatsApp Outreach
               </h1>
-              <p className="text-sm text-slate-600 mb-3">
+              <p
+                className={`text-xs sm:text-sm mb-3 ${
+                  isDark ? 'text-slate-400' : 'text-slate-600'
+                }`}
+              >
                 Upload your company spreadsheet with director or owner names, corporate emails, phone numbers, and addresses. Verify deliverability, flag invalid addresses, and send prescripted WhatsApp messages with automatic data interpolation.
               </p>
               <button
                 onClick={() => setIsUserGuideOpen(true)}
                 id="btn-hero-user-guide"
-                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-full border border-blue-200 transition-colors shadow-2xs cursor-pointer"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors shadow-2xs cursor-pointer min-h-[36px] ${
+                  isDark
+                    ? 'bg-blue-950/80 text-blue-300 border-blue-800 hover:bg-blue-900'
+                    : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                }`}
               >
-                <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                <BookOpen className="w-3.5 h-3.5 text-blue-500" />
                 <span>New here? Read the User Manual & Best Practice Guide</span>
               </button>
             </div>
@@ -600,9 +625,11 @@ export default function App() {
               totalFilteredCount={filteredRecords.length}
               onToggleSelectAllFiltered={handleToggleSelectAllFiltered}
               allFilteredSelected={allFilteredSelected}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
             />
 
-            {/* Interactive Data Table with WhatsApp Action Buttons */}
+            {/* Interactive Data Table / Cards with WhatsApp Action Buttons */}
             <EmailTable
               records={filteredRecords}
               mappings={mappings}
@@ -617,6 +644,7 @@ export default function App() {
               onPageChange={setCurrentPage}
               onPageSizeChange={setPageSize}
               totalFilteredRecords={filteredRecords.length}
+              viewMode={viewMode}
             />
           </div>
         )}
@@ -673,37 +701,57 @@ export default function App() {
       {/* Dashboard Footer with Signature */}
       <footer
         id="app-footer"
-        className="mt-12 py-6 border-t border-slate-200 bg-white/90 backdrop-blur-xs text-xs text-slate-500"
+        className={`mt-12 py-6 border-t backdrop-blur-xs text-xs transition-colors ${
+          isDark
+            ? 'border-slate-800 bg-slate-900/90 text-slate-400'
+            : 'border-slate-200 bg-white/90 text-slate-500'
+        }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
-            <span className="font-semibold text-slate-800">Email Verifier & Director Outreach Suite</span>
-            <span className="text-slate-300 hidden sm:inline">•</span>
-            <span className="text-slate-500">Automated DNS Hygiene & WhatsApp Automation</span>
+            <span className={`font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+              Email Verifier & Director Outreach Suite
+            </span>
+            <span className="text-slate-400 hidden sm:inline">•</span>
+            <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
+              Automated DNS Hygiene & WhatsApp Automation
+            </span>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap justify-center">
             <button
               onClick={() => setIsUserGuideOpen(true)}
               id="footer-btn-user-guide"
-              className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-medium hover:underline cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-blue-500 hover:text-blue-400 font-medium hover:underline cursor-pointer min-h-[36px]"
             >
               <BookOpen className="w-3.5 h-3.5" />
               <span>User Manual & Guide</span>
             </button>
-            <span className="text-slate-300">•</span>
+            <span className="text-slate-400">•</span>
             <div
               id="dashboard-developer-signature"
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-200/90 shadow-2xs"
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full font-medium border shadow-2xs ${
+                isDark
+                  ? 'bg-slate-800 text-slate-200 border-slate-700'
+                  : 'bg-slate-100 text-slate-700 border-slate-200/90'
+              }`}
             >
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
               <span>
-                Developed by <strong className="text-slate-900 font-bold">Ammar Thaqif</strong>
+                Developed by <strong className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Ammar Thaqif</strong>
               </span>
             </div>
           </div>
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <DashboardApp />
+    </ThemeProvider>
   );
 }
