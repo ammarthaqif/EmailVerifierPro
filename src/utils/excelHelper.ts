@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { EmailRecord, VerificationResult, ColumnMappings } from '../types';
+import { validateAndClassifyPhone } from './phoneValidator';
 
 export interface ParsedSheetData {
   fileName: string;
@@ -198,6 +199,7 @@ export function parseExcelFile(
     const companyName = columnMappings.companyNameColumn ? String(row[columnMappings.companyNameColumn] || '').trim() : '';
     const phoneNumber = columnMappings.phoneColumn ? String(row[columnMappings.phoneColumn] || '').trim() : '';
     const registeredAddress = columnMappings.addressColumn ? String(row[columnMappings.addressColumn] || '').trim() : '';
+    const phoneValidation = phoneNumber ? validateAndClassifyPhone(phoneNumber) : undefined;
 
     return {
       id: `row-${index + 1}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -207,6 +209,7 @@ export function parseExcelFile(
       ownerName: ownerName || undefined,
       companyName: companyName || undefined,
       phoneNumber: phoneNumber || undefined,
+      phoneValidation,
       registeredAddress: registeredAddress || undefined,
       rawData: row,
       emailColumnName: detectedEmailColumn,
@@ -359,6 +362,42 @@ export function generateSampleDataset(): ArrayBuffer {
       'Industry': 'Import & Export',
     },
     {
+      'Director Name': 'Penang Regional Office',
+      'Company Name': 'Northern Peninsula Industrial Park',
+      'Designation': 'Branch Operations Center',
+      'Email': 'penang.office@northernindustrial.my',
+      'Phone Number': '+60 4-226 8899', // Penang Landline (04)
+      'Registered Address': 'Level 5, Menara Boustead, 39 Jalan Sultan Ahmad Shah, 10050 Georgetown, Penang',
+      'Industry': 'Industrial Infrastructure',
+    },
+    {
+      'Director Name': 'Singapore Headquarters Desk',
+      'Company Name': 'Temasek Prime Commercial Trust',
+      'Designation': 'Main Switchboard',
+      'Email': 'enquiry@temasekprime.sg',
+      'Phone Number': '+65 6789 0123', // Singapore Corporate Landline (6xxx)
+      'Registered Address': '10 Collyer Quay, Ocean Financial Centre, Singapore 049315',
+      'Industry': 'Real Estate Investment Trust',
+    },
+    {
+      'Director Name': 'Customer Hotline Center',
+      'Company Name': 'OmniCare Health Services',
+      'Designation': 'Toll-Free Support Line',
+      'Email': 'support@omnicarehealth.com',
+      'Phone Number': '1800-88-1234', // Toll-Free
+      'Registered Address': 'Tower B, Vertical Business Suite, Bangsar South, 59200 Kuala Lumpur',
+      'Industry': 'Healthcare Solutions',
+    },
+    {
+      'Director Name': 'Invalid Phone Record',
+      'Company Name': 'Malformed Data Sample LLC',
+      'Designation': 'Account Executive',
+      'Email': 'sample.contact@validcompany.com',
+      'Phone Number': '03-99', // Invalid short phone
+      'Registered Address': '12 Jalan Universiti, 46200 Petaling Jaya, Selangor',
+      'Industry': 'Testing Services',
+    },
+    {
       'Director Name': 'Invalid Syntax Contact',
       'Company Name': 'Malformed Records Corp',
       'Designation': 'General Manager',
@@ -447,10 +486,37 @@ export function exportDataset(
       rowObj['Has MX Records'] = rec.verification ? (rec.verification.hasMxRecords ? 'YES' : 'NO') : 'N/A';
       rowObj['Is Disposable'] = rec.verification ? (rec.verification.isDisposable ? 'YES' : 'NO') : 'N/A';
       rowObj['Is Role Account'] = rec.verification ? (rec.verification.isRoleBased ? 'YES' : 'NO') : 'N/A';
+      
+      // Telephony & Line Classification
+      const pVal = rec.phoneValidation || (rec.phoneNumber ? validateAndClassifyPhone(rec.phoneNumber) : undefined);
+      if (pVal) {
+        rowObj['Phone Clean (E.164)'] = pVal.formatted;
+        rowObj['Phone Line Type'] = pVal.typeLabel;
+        rowObj['Phone Region / Exchange'] = pVal.regionOrCity;
+        rowObj['WhatsApp Eligible (Mobile)'] = pVal.isWhatsAppEligible ? 'YES (Mobile)' : (pVal.type === 'landline' ? 'NO (Landline Fixed Line)' : 'NO');
+      } else {
+        rowObj['Phone Clean (E.164)'] = '';
+        rowObj['Phone Line Type'] = 'No Phone';
+        rowObj['Phone Region / Exchange'] = '';
+        rowObj['WhatsApp Eligible (Mobile)'] = 'NO';
+      }
+
       rowObj['WhatsApp Contacted'] = rec.whatsappSent ? 'YES' : 'NO';
       if (rec.whatsappSentAt) {
         rowObj['WhatsApp Sent At'] = rec.whatsappSentAt;
       }
+      rowObj['Email Contacted'] = rec.emailSent ? 'YES' : 'NO';
+      if (rec.emailSentAt) {
+        rowObj['Email Sent At'] = rec.emailSentAt;
+      }
+      rowObj['Contacted Status'] =
+        rec.whatsappSent && rec.emailSent
+          ? 'WhatsApp & Email Sent'
+          : rec.whatsappSent
+          ? 'WhatsApp Sent'
+          : rec.emailSent
+          ? 'Email Sent'
+          : 'Not Contacted';
       if (rec.verification?.typoSuggestion) {
         rowObj['Suggested Typo Fix'] = rec.verification.typoSuggestion;
       }

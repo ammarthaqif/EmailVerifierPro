@@ -1,6 +1,6 @@
 {
   "name": "Remix Email Verifier \u0026 Clean Data Dashboard",
-  "description": "Ingest Excel spreadsheets, verify email validity, MX records, syntax, and deliverability, inspect detailed diagnostics, filter results, and export clean datasets.",
+  "description": "Ingest Excel spreadsheets, verify email deliverability and MX records, validate phone numbers, classify landline vs. mobile lines, draft prescripted WhatsApp messages, and export clean datasets.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

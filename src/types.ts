@@ -25,6 +25,24 @@ export interface VerificationResult {
   checkedAt: string;
 }
 
+export type PhoneType = 'mobile' | 'landline' | 'toll_free' | 'voip' | 'invalid' | 'unknown';
+
+export interface PhoneValidationResult {
+  raw: string;
+  digits: string;
+  formatted: string;
+  isValid: boolean;
+  type: PhoneType;
+  typeLabel: string;
+  countryCode: string;
+  countryName: string;
+  nationalNumber: string;
+  regionOrCity: string;
+  isWhatsAppEligible: boolean;
+  issue?: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
 export interface ColumnMappings {
   emailColumn: string;
   phoneColumn: string;
@@ -43,12 +61,15 @@ export interface EmailRecord {
   ownerName?: string;
   companyName?: string;
   phoneNumber?: string;
+  phoneValidation?: PhoneValidationResult;
   registeredAddress?: string;
   verification?: VerificationResult;
   isSelected?: boolean;
   typoFixed?: boolean;
   whatsappSent?: boolean;
   whatsappSentAt?: string | number;
+  emailSent?: boolean;
+  emailSentAt?: string | number;
 }
 
 export interface WhatsAppTemplateConfig {
@@ -68,7 +89,14 @@ export interface VerificationSummary {
   disposableCount: number;
   roleCount: number;
   whatsappSentCount?: number;
+  emailSentCount?: number;
+  contactedCount?: number;
+  bothContactedCount?: number;
+  notContactedCount?: number;
   hasPhoneCount?: number;
+  mobilePhoneCount?: number;
+  landlinePhoneCount?: number;
+  invalidPhoneCount?: number;
   avgScore: number;
   topProviders: { provider: string; count: number }[];
 }
@@ -77,6 +105,8 @@ export interface FilterState {
   search: string;
   status: 'all' | 'valid' | 'risky' | 'invalid' | 'untested' | 'hasTypo';
   whatsappFilter?: 'all' | 'sent' | 'not_sent' | 'has_phone' | 'no_phone';
+  phoneFilter?: 'all' | 'mobile' | 'landline' | 'toll_free' | 'invalid' | 'has_phone' | 'no_phone';
+  outreachFilter?: 'all' | 'contacted_any' | 'whatsapp_sent' | 'email_sent' | 'both_sent' | 'not_contacted';
   provider: string;
   minScore: number;
   maxScore: number;

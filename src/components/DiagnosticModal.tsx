@@ -13,6 +13,10 @@ import {
   AlertOctagon,
   Clock,
   Wand2,
+  PhoneCall,
+  Smartphone,
+  PhoneOff,
+  Phone,
 } from 'lucide-react';
 import { EmailRecord } from '../types';
 import { useTheme } from '../context/ThemeContext';
@@ -231,6 +235,92 @@ export const DiagnosticModal: React.FC<DiagnosticModalProps> = ({
               <p>This row has not been verified yet.</p>
             </div>
           )}
+
+          {/* Telephony & Phone Classification Diagnostics */}
+          <div>
+            <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>
+              <Smartphone className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Telephony Intelligence & Line Classification</span>
+            </h4>
+
+            {record.phoneValidation && record.phoneValidation.raw ? (
+              <div className={`p-3.5 rounded-xl border space-y-3 ${isDark ? 'bg-slate-800/60 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200/60 dark:border-slate-700/60">
+                  <div>
+                    <span className="text-[11px] text-slate-400 block font-medium">Standardized Number (E.164)</span>
+                    <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+                      {record.phoneValidation.formatted || record.phoneValidation.raw}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {record.phoneValidation.type === 'mobile' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                        <Smartphone className="w-3 h-3 text-emerald-600" />
+                        <span>Mobile Line</span>
+                      </span>
+                    ) : record.phoneValidation.type === 'landline' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                        <PhoneCall className="w-3 h-3 text-amber-600" />
+                        <span>Landline (Office)</span>
+                      </span>
+                    ) : record.phoneValidation.type === 'toll_free' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
+                        <Phone className="w-3 h-3 text-blue-600" />
+                        <span>Toll-Free</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                        <PhoneOff className="w-3 h-3 text-rose-600" />
+                        <span>Invalid Line</span>
+                      </span>
+                    )}
+
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border ${
+                        record.phoneValidation.isWhatsAppEligible
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-300 dark:border-slate-700'
+                      }`}
+                    >
+                      {record.phoneValidation.isWhatsAppEligible ? 'WhatsApp Eligible' : 'Voice Calls Only'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Exchange / Region</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                      {record.phoneValidation.regionOrCity || 'General'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Country</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5 block">
+                      {record.phoneValidation.countryName} (+{record.phoneValidation.countryCode})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Clean Digits</span>
+                    <span className="font-mono text-slate-700 dark:text-slate-300 mt-0.5 block">
+                      {record.phoneValidation.digits}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Input Raw</span>
+                    <span className="font-mono text-slate-500 mt-0.5 block truncate" title={record.phoneValidation.raw}>
+                      {record.phoneValidation.raw}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className={`p-4 text-center rounded-xl border text-xs text-slate-400 ${isDark ? 'bg-slate-800/40 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                No telephone number associated with this contact row.
+              </div>
+            )}
+          </div>
 
           {/* Original Row Data from Excel */}
           <div>

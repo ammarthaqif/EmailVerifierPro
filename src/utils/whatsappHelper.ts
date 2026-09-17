@@ -1,66 +1,14 @@
-import { EmailRecord, ColumnMappings } from '../types';
+import { EmailRecord, ColumnMappings, PhoneValidationResult, PhoneType } from '../types';
+import { validateAndClassifyPhone } from './phoneValidator';
 
-export interface CleanPhoneResult {
-  raw: string;
-  digits: string;
-  formatted: string;
-  isValid: boolean;
-}
+export { validateAndClassifyPhone };
+export type { PhoneValidationResult, PhoneType };
 
-// Clean phone numbers and prepend country code if needed
+export interface CleanPhoneResult extends PhoneValidationResult {}
+
+// Clean and validate phone numbers and classify as mobile vs landline
 export function cleanPhoneNumber(rawPhone: string | number | undefined, defaultCountryCode = '60'): CleanPhoneResult {
-  if (rawPhone === undefined || rawPhone === null) {
-    return { raw: '', digits: '', formatted: '', isValid: false };
-  }
-
-  const raw = String(rawPhone).trim();
-  if (!raw) {
-    return { raw: '', digits: '', formatted: '', isValid: false };
-  }
-
-  // Normalize defaultCountryCode to purely digits without '+'
-  const normCode = defaultCountryCode.replace(/\D/g, '') || '60';
-
-  // Remove any spaces, dashes, brackets, dots
-  let digits = raw.replace(/\D/g, '');
-
-  // If the raw number started with '+', digits contains the full country code + number
-  if (raw.startsWith('+')) {
-    // Keep as is
-  } else if (raw.startsWith('00')) {
-    // International prefix like 0060 -> 60
-    digits = digits.substring(2);
-  } else if (raw.startsWith('0')) {
-    // Local number starting with 0 (e.g., 0123456789 in Malaysia)
-    // Replace leading 0 with default country code
-    digits = `${normCode}${digits.substring(1)}`;
-  } else if (digits.length <= 10 && !digits.startsWith(normCode)) {
-    // Short number without country code
-    digits = `${normCode}${digits}`;
-  }
-
-  // A valid mobile phone usually has between 8 and 15 digits
-  const isValid = digits.length >= 8 && digits.length <= 16;
-
-  // Pretty format for display
-  let formatted = `+${digits}`;
-  if (digits.startsWith('60') && digits.length >= 10) {
-    // Malaysia: +60 12-345 6789
-    formatted = `+60 ${digits.slice(2, 4)}-${digits.slice(4, 7)} ${digits.slice(7)}`;
-  } else if (digits.startsWith('1') && digits.length === 11) {
-    // US/Canada: +1 (415) 555-0199
-    formatted = `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  } else if (digits.startsWith('65') && digits.length === 10) {
-    // SG: +65 9123 4567
-    formatted = `+65 ${digits.slice(2, 6)} ${digits.slice(6)}`;
-  }
-
-  return {
-    raw,
-    digits,
-    formatted,
-    isValid,
-  };
+  return validateAndClassifyPhone(rawPhone, defaultCountryCode);
 }
 
 export interface PresetTemplate {

@@ -32,6 +32,7 @@ import {
   interpolateWhatsAppMessage,
   cleanPhoneNumber,
   generateWhatsAppUrl,
+  validateAndClassifyPhone,
 } from './utils/whatsappHelper';
 import { verifyBatchSafe, verifyEmailSafe } from './utils/clientVerification';
 import {
@@ -101,6 +102,8 @@ function DashboardApp() {
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     status: 'all',
+    phoneFilter: 'all',
+    outreachFilter: 'all',
     provider: 'all',
     minScore: 0,
     maxScore: 100,
@@ -119,6 +122,14 @@ function DashboardApp() {
     setDefaultCountryCode(countryCode);
     setSafeLocalStorage(STORAGE_KEY_TEMPLATE, newText);
     setSafeLocalStorage(STORAGE_KEY_COUNTRY, countryCode);
+
+    // Re-evaluate phone classification for all records with the new default country code
+    setRecords((prev) =>
+      prev.map((r) => ({
+        ...r,
+        phoneValidation: r.phoneNumber ? validateAndClassifyPhone(r.phoneNumber, countryCode) : undefined,
+      }))
+    );
   };
 
   // Handle batch verification (resilient with online and client-side fallback)
@@ -205,6 +216,7 @@ function DashboardApp() {
     setFilters({
       search: '',
       status: 'all',
+      phoneFilter: 'all',
       provider: 'all',
       minScore: 0,
       maxScore: 100,
@@ -238,6 +250,10 @@ function DashboardApp() {
         ? String(r.rawData[newMappings.addressColumn] || '').trim()
         : r.registeredAddress;
 
+      const phoneValidation = phoneVal
+        ? validateAndClassifyPhone(phoneVal, defaultCountryCode)
+        : undefined;
+
       return {
         ...r,
         emailColumnName: newMappings.emailColumn || r.emailColumnName,
@@ -248,6 +264,7 @@ function DashboardApp() {
         ownerName: ownerVal,
         companyName: companyVal,
         phoneNumber: phoneVal,
+        phoneValidation,
         registeredAddress: addressVal,
       };
     });
@@ -299,6 +316,115 @@ function DashboardApp() {
             }
           : r
       )
+    );
+  };
+
+  // Toggle individual WhatsApp sent status
+  const handleToggleWhatsAppSent = (recordId: string, value?: boolean) => {
+    setRecords((prev) =>
+      prev.map((r) => {
+        if (r.id !== recordId) return r;
+        const newStatus = value !== undefined ? value : !r.whatsappSent;
+        return {
+          ...r,
+          whatsappSent: newStatus,
+          whatsappSentAt: newStatus ? (r.whatsappSentAt || new Date().toISOString()) : undefined,
+        };
+      })
+    );
+  };
+
+  // Toggle individual Email sent status
+  const handleToggleEmailSent = (recordId: string, value?: boolean) => {
+    setRecords((prev) =>
+      prev.map((r) => {
+        if (r.id !== recordId) return r;
+        const newStatus = value !== undefined ? value : !r.emailSent;
+        return {
+          ...r,
+          emailSent: newStatus,
+          emailSentAt: newStatus ? (r.emailSentAt || new Date().toISOString()) : undefined,
+        };
+      })
+    );
+  };
+
+  // Quick email dispatch via standard mailto protocol
+  const handleSendEmail = (record: EmailRecord) => {
+    const email = record.currentEmail;
+    if (!email) return;
+
+    const company = record.companyName || '';
+    const owner = record.ownerName || '';
+    const subject = encodeURIComponent(
+      company ? `Outreach & Inquiry - ${company}` : `Outreach & Partnership Inquiry`
+    );
+    const body = encodeURIComponent(
+      `Hi ${owner || 'there'},\n\nI hope this email finds you well. I am reaching out regarding ${
+        company || 'your business'
+      }.\n\nBest regards,`
+    );
+
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+
+    // Mark as email sent
+    handleToggleEmailSent(record.id, true);
+  };
+
+  // Mark all records of a specific company as contacted (WhatsApp, Email, or Both)
+  const handleMarkCompanyContacted = (
+    companyName: string,
+    channel: 'whatsapp' | 'email' | 'both',
+    status: boolean
+  ) => {
+    if (!companyName) return;
+    const norm = companyName.trim().toLowerCase();
+    const now = new Date().toISOString();
+
+    setRecords((prev) =>
+      prev.map((r) => {
+        const rComp = (r.companyName || '').trim().toLowerCase();
+        if (rComp !== norm) return r;
+
+        const updated = { ...r };
+        if (channel === 'whatsapp' || channel === 'both') {
+          updated.whatsappSent = status;
+          updated.whatsappSentAt = status ? (r.whatsappSentAt || now) : undefined;
+        }
+        if (channel === 'email' || channel === 'both') {
+          updated.emailSent = status;
+          updated.emailSentAt = status ? (r.emailSentAt || now) : undefined;
+        }
+        return updated;
+      })
+    );
+  };
+
+  // Batch mark selected rows or filtered view as contacted
+  const handleBatchMarkContacted = (
+    channel: 'whatsapp' | 'email' | 'both',
+    status: boolean
+  ) => {
+    const selectedIds = new Set(records.filter((r) => r.isSelected).map((r) => r.id));
+    const targetIds = selectedIds.size > 0 ? selectedIds : new Set(filteredRecords.map((r) => r.id));
+    if (targetIds.size === 0) return;
+
+    const now = new Date().toISOString();
+    setRecords((prev) =>
+      prev.map((r) => {
+        if (!targetIds.has(r.id)) return r;
+
+        const updated = { ...r };
+        if (channel === 'whatsapp' || channel === 'both') {
+          updated.whatsappSent = status;
+          updated.whatsappSentAt = status ? (r.whatsappSentAt || now) : undefined;
+        }
+        if (channel === 'email' || channel === 'both') {
+          updated.emailSent = status;
+          updated.emailSentAt = status ? (r.emailSentAt || now) : undefined;
+        }
+        return updated;
+      })
     );
   };
 
@@ -374,14 +500,17 @@ function DashboardApp() {
       const rawValues = Object.values(rec.rawData)
         .map((v) => String(v).toLowerCase())
         .join(' ');
+      const pVal = rec.phoneValidation || (rec.phoneNumber ? validateAndClassifyPhone(rec.phoneNumber, defaultCountryCode) : undefined);
 
-      // Search query across email, owner name, company name, phone, or reason
+      // Search query across email, owner name, company name, phone, phone type/region, or reason
       if (filters.search) {
         const q = filters.search.toLowerCase();
         const matchesEmail = emailLower.includes(q);
         const matchesOwner = (rec.ownerName || '').toLowerCase().includes(q);
         const matchesCompany = (rec.companyName || '').toLowerCase().includes(q);
         const matchesPhone = (rec.phoneNumber || '').toLowerCase().includes(q);
+        const matchesPhoneType = (pVal?.typeLabel || '').toLowerCase().includes(q);
+        const matchesPhoneRegion = (pVal?.regionOrCity || '').toLowerCase().includes(q);
         const matchesReason = res?.reason.toLowerCase().includes(q) || false;
         const matchesExpl = res?.explanation.toLowerCase().includes(q) || false;
         const matchesRaw = rawValues.includes(q);
@@ -390,6 +519,8 @@ function DashboardApp() {
           !matchesOwner &&
           !matchesCompany &&
           !matchesPhone &&
+          !matchesPhoneType &&
+          !matchesPhoneRegion &&
           !matchesReason &&
           !matchesExpl &&
           !matchesRaw
@@ -405,12 +536,33 @@ function DashboardApp() {
       if (filters.status === 'untested' && res !== undefined) return false;
       if (filters.status === 'hasTypo' && (!res?.typoSuggestion || rec.typoFixed)) return false;
 
+      // Phone Line Classification filter
+      if (filters.phoneFilter && filters.phoneFilter !== 'all') {
+        if (filters.phoneFilter === 'mobile' && pVal?.type !== 'mobile') return false;
+        if (filters.phoneFilter === 'landline' && pVal?.type !== 'landline') return false;
+        if (filters.phoneFilter === 'toll_free' && pVal?.type !== 'toll_free') return false;
+        if (filters.phoneFilter === 'invalid' && pVal?.type !== 'invalid') return false;
+        if (filters.phoneFilter === 'has_phone' && !rec.phoneNumber) return false;
+        if (filters.phoneFilter === 'no_phone' && !!rec.phoneNumber) return false;
+      }
+
+      // Outreach status filter (WhatsApp, Email, Both, or Not Contacted)
+      if (filters.outreachFilter && filters.outreachFilter !== 'all') {
+        const hasWa = !!rec.whatsappSent;
+        const hasEm = !!rec.emailSent;
+        if (filters.outreachFilter === 'contacted_any' && !hasWa && !hasEm) return false;
+        if (filters.outreachFilter === 'whatsapp_sent' && !hasWa) return false;
+        if (filters.outreachFilter === 'email_sent' && !hasEm) return false;
+        if (filters.outreachFilter === 'both_sent' && (!hasWa || !hasEm)) return false;
+        if (filters.outreachFilter === 'not_contacted' && (hasWa || hasEm)) return false;
+      }
+
       // Provider filter
       if (filters.provider !== 'all' && res?.provider !== filters.provider) return false;
 
       return true;
     });
-  }, [records, filters]);
+  }, [records, filters, defaultCountryCode]);
 
   // Select all filtered toggle
   const allFilteredSelected = useMemo(() => {
@@ -439,12 +591,32 @@ function DashboardApp() {
     let totalScore = 0;
     let scoreCount = 0;
     let whatsappSentCount = 0;
+    let emailSentCount = 0;
+    let contactedCount = 0;
+    let bothContactedCount = 0;
+    let notContactedCount = 0;
     let hasPhoneCount = 0;
+    let mobilePhoneCount = 0;
+    let landlinePhoneCount = 0;
+    let invalidPhoneCount = 0;
     const providerMap = new Map<string, number>();
 
     records.forEach((rec) => {
-      if (rec.whatsappSent) whatsappSentCount++;
-      if (rec.phoneNumber && rec.phoneNumber.trim().length > 3) hasPhoneCount++;
+      const hasWa = !!rec.whatsappSent;
+      const hasEm = !!rec.emailSent;
+      if (hasWa) whatsappSentCount++;
+      if (hasEm) emailSentCount++;
+      if (hasWa || hasEm) contactedCount++;
+      if (hasWa && hasEm) bothContactedCount++;
+      if (!hasWa && !hasEm) notContactedCount++;
+
+      const pVal = rec.phoneValidation || (rec.phoneNumber ? validateAndClassifyPhone(rec.phoneNumber, defaultCountryCode) : undefined);
+      if (rec.phoneNumber && rec.phoneNumber.trim().length > 3) {
+        hasPhoneCount++;
+        if (pVal?.type === 'mobile') mobilePhoneCount++;
+        else if (pVal?.type === 'landline') landlinePhoneCount++;
+        else if (pVal?.type === 'invalid') invalidPhoneCount++;
+      }
 
       const v = rec.verification;
       if (!v) {
@@ -482,11 +654,18 @@ function DashboardApp() {
       disposableCount,
       roleCount,
       whatsappSentCount,
+      emailSentCount,
+      contactedCount,
+      bothContactedCount,
+      notContactedCount,
       hasPhoneCount,
+      mobilePhoneCount,
+      landlinePhoneCount,
+      invalidPhoneCount,
       avgScore,
       topProviders,
     };
-  }, [records]);
+  }, [records, defaultCountryCode]);
 
   const selectedCount = useMemo(() => records.filter((r) => r.isSelected).length, [records]);
 
@@ -602,6 +781,22 @@ function DashboardApp() {
               summary={summary}
               onFilterByStatus={(status) => setFilters((prev) => ({ ...prev, status }))}
               activeStatus={filters.status}
+              onFilterByPhone={(phoneFilter) => {
+                setFilters((prev) => ({
+                  ...prev,
+                  phoneFilter: prev.phoneFilter === phoneFilter ? 'all' : phoneFilter,
+                }));
+                setCurrentPage(1);
+              }}
+              activePhoneFilter={filters.phoneFilter}
+              onFilterByOutreach={(outreachFilter) => {
+                setFilters((prev) => ({
+                  ...prev,
+                  outreachFilter: prev.outreachFilter === outreachFilter ? 'all' : outreachFilter,
+                }));
+                setCurrentPage(1);
+              }}
+              activeOutreachFilter={filters.outreachFilter}
             />
 
             {/* AI Insights & Campaign Deliverability Advice */}
@@ -625,13 +820,15 @@ function DashboardApp() {
               totalFilteredCount={filteredRecords.length}
               onToggleSelectAllFiltered={handleToggleSelectAllFiltered}
               allFilteredSelected={allFilteredSelected}
+              onBatchMarkContacted={handleBatchMarkContacted}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
             />
 
-            {/* Interactive Data Table / Cards with WhatsApp Action Buttons */}
+            {/* Interactive Data Table / Cards with WhatsApp & Email Outreach */}
             <EmailTable
               records={filteredRecords}
+              allRecords={records}
               mappings={mappings}
               defaultCountryCode={defaultCountryCode}
               onToggleSelectRow={handleToggleSelectRow}
@@ -639,6 +836,10 @@ function DashboardApp() {
               onInspectRecord={(rec) => setInspectRecord(rec)}
               onSendWhatsApp={handleDirectSendWhatsApp}
               onPreviewWhatsApp={handlePreviewWhatsApp}
+              onToggleWhatsAppSent={handleToggleWhatsAppSent}
+              onToggleEmailSent={handleToggleEmailSent}
+              onSendEmail={handleSendEmail}
+              onMarkCompanyContacted={handleMarkCompanyContacted}
               currentPage={currentPage}
               pageSize={pageSize}
               onPageChange={setCurrentPage}

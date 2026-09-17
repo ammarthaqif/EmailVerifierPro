@@ -1,18 +1,26 @@
 import React from 'react';
-import { Mail, CheckCircle2, AlertTriangle, XCircle, Gauge } from 'lucide-react';
-import { VerificationSummary } from '../types';
+import { Mail, CheckCircle2, AlertTriangle, XCircle, Gauge, Smartphone, PhoneCall, PhoneOff, Phone, Send, Check, MessageSquare } from 'lucide-react';
+import { VerificationSummary, FilterState } from '../types';
 import { useTheme } from '../context/ThemeContext';
 
 interface StatsCardsProps {
   summary: VerificationSummary;
   onFilterByStatus: (status: 'all' | 'valid' | 'risky' | 'invalid') => void;
   activeStatus: string;
+  onFilterByPhone?: (phoneFilter: 'all' | 'mobile' | 'landline' | 'invalid') => void;
+  activePhoneFilter?: string;
+  onFilterByOutreach?: (outreachFilter: FilterState['outreachFilter']) => void;
+  activeOutreachFilter?: string;
 }
 
 export const StatsCards: React.FC<StatsCardsProps> = ({
   summary,
   onFilterByStatus,
   activeStatus,
+  onFilterByPhone,
+  activePhoneFilter,
+  onFilterByOutreach,
+  activeOutreachFilter,
 }) => {
   const { isDark, themeConfig } = useTheme();
 
@@ -320,6 +328,232 @@ export const StatsCards: React.FC<StatsCardsProps> = ({
             }`}
             style={{ width: `${summary.avgScore}%` }}
           />
+        </div>
+      </div>
+
+      {/* Telephony Intelligence & Classification Bar */}
+      {Boolean(summary.hasPhoneCount && summary.hasPhoneCount > 0) && (
+        <div
+          className={`col-span-2 sm:col-span-2 lg:col-span-5 px-3.5 py-2.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
+            isDark
+              ? 'bg-slate-900/60 border-slate-800/80 text-slate-300'
+              : 'bg-slate-50/80 border-slate-200/80 text-slate-700'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className={`p-1 rounded-md ${
+                isDark ? 'bg-blue-950/70 text-blue-400' : 'bg-blue-100 text-blue-700'
+              }`}
+            >
+              <Phone className="w-3.5 h-3.5" />
+            </span>
+            <span className="font-semibold text-xs">
+              Telephony Breakdown ({summary.hasPhoneCount} numbers detected):
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {onFilterByPhone ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onFilterByPhone('mobile')}
+                  id="stat-phone-mobile"
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                    activePhoneFilter === 'mobile'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : isDark
+                      ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-900/50 hover:bg-emerald-900/50'
+                      : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100/70'
+                  }`}
+                  title="Filter to mobile phones"
+                >
+                  <Smartphone className="w-3 h-3 text-emerald-500" />
+                  <span>
+                    <strong>{summary.mobilePhoneCount || 0}</strong> Mobile (WhatsApp Ready)
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onFilterByPhone('landline')}
+                  id="stat-phone-landline"
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                    activePhoneFilter === 'landline'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : isDark
+                      ? 'bg-amber-950/40 text-amber-300 border border-amber-900/50 hover:bg-amber-900/50'
+                      : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100/70'
+                  }`}
+                  title="Filter to landline fixed lines"
+                >
+                  <PhoneCall className="w-3 h-3 text-amber-500" />
+                  <span>
+                    <strong>{summary.landlinePhoneCount || 0}</strong> Landline (Office Voice)
+                  </span>
+                </button>
+
+                {Boolean(summary.invalidPhoneCount && summary.invalidPhoneCount > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => onFilterByPhone('invalid')}
+                    id="stat-phone-invalid"
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                      activePhoneFilter === 'invalid'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : isDark
+                        ? 'bg-rose-950/40 text-rose-300 border border-rose-900/50 hover:bg-rose-900/50'
+                        : 'bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100/70'
+                    }`}
+                    title="Filter to invalid telephone numbers"
+                  >
+                    <PhoneOff className="w-3 h-3 text-rose-500" />
+                    <span>
+                      <strong>{summary.invalidPhoneCount}</strong> Invalid Numbers
+                    </span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                  <Smartphone className="w-3 h-3" />
+                  {summary.mobilePhoneCount || 0} Mobile
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
+                  <PhoneCall className="w-3 h-3" />
+                  {summary.landlinePhoneCount || 0} Landline
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Outreach & Contact Status Tracker Bar */}
+      <div
+        className={`col-span-2 sm:col-span-2 lg:col-span-5 px-3.5 py-2.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
+          isDark
+            ? 'bg-slate-900/60 border-slate-800/80 text-slate-300'
+            : 'bg-slate-50/80 border-slate-200/80 text-slate-700'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={`p-1 rounded-md ${
+              isDark ? 'bg-emerald-950/70 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
+            }`}
+          >
+            <Send className="w-3.5 h-3.5" />
+          </span>
+          <span className="font-semibold text-xs">
+            Outreach Progress ({(summary.contactedCount || 0)} of {summary.total} contacted):
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {onFilterByOutreach ? (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  onFilterByOutreach(activeOutreachFilter === 'whatsapp_sent' ? 'all' : 'whatsapp_sent')
+                }
+                id="stat-outreach-whatsapp"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  activeOutreachFilter === 'whatsapp_sent'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : isDark
+                    ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-900/50 hover:bg-emerald-900/50'
+                    : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100/70'
+                }`}
+                title="Filter records contacted via WhatsApp"
+              >
+                <MessageSquare className="w-3 h-3 text-emerald-500" />
+                <span>
+                  <strong>{summary.whatsappSentCount || 0}</strong> WhatsApp Sent
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onFilterByOutreach(activeOutreachFilter === 'email_sent' ? 'all' : 'email_sent')
+                }
+                id="stat-outreach-email"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  activeOutreachFilter === 'email_sent'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : isDark
+                    ? 'bg-blue-950/40 text-blue-300 border border-blue-900/50 hover:bg-blue-900/50'
+                    : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100/70'
+                }`}
+                title="Filter records contacted via Email"
+              >
+                <Mail className="w-3 h-3 text-blue-500" />
+                <span>
+                  <strong>{summary.emailSentCount || 0}</strong> Email Sent
+                </span>
+              </button>
+
+              {Boolean(summary.bothContactedCount && summary.bothContactedCount > 0) && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onFilterByOutreach(activeOutreachFilter === 'both_sent' ? 'all' : 'both_sent')
+                  }
+                  id="stat-outreach-both"
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                    activeOutreachFilter === 'both_sent'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : isDark
+                      ? 'bg-purple-950/40 text-purple-300 border border-purple-900/50 hover:bg-purple-900/50'
+                      : 'bg-purple-50 text-purple-800 border border-purple-200 hover:bg-purple-100/70'
+                  }`}
+                  title="Filter records contacted via both WhatsApp and Email"
+                >
+                  <Check className="w-3 h-3 text-purple-500" />
+                  <span>
+                    <strong>{summary.bothContactedCount}</strong> WhatsApp & Email
+                  </span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() =>
+                  onFilterByOutreach(activeOutreachFilter === 'not_contacted' ? 'all' : 'not_contacted')
+                }
+                id="stat-outreach-pending"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  activeOutreachFilter === 'not_contacted'
+                    ? 'bg-slate-700 text-white shadow-xs'
+                    : isDark
+                    ? 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-750'
+                    : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
+                }`}
+                title="Filter uncontacted companies / records"
+              >
+                <span>
+                  <strong>{summary.notContactedCount ?? (summary.total - (summary.contactedCount || 0))}</strong> Pending
+                </span>
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                <MessageSquare className="w-3 h-3" />
+                {summary.whatsappSentCount || 0} WhatsApp
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="inline-flex items-center gap-1 text-blue-600 font-medium">
+                <Mail className="w-3 h-3" />
+                {summary.emailSentCount || 0} Email
+              </span>
+            </>
+          )}
         </div>
       </div>
     </div>

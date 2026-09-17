@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -16,13 +16,20 @@ import {
   Send,
   Eye,
   Check,
+  PhoneCall,
+  PhoneOff,
+  Phone,
+  Mail,
+  MessageSquare,
 } from 'lucide-react';
-import { EmailRecord, VerificationResult, ColumnMappings } from '../types';
+import { EmailRecord, VerificationResult, ColumnMappings, PhoneValidationResult } from '../types';
 import { cleanPhoneNumber } from '../utils/whatsappHelper';
 import { useTheme } from '../context/ThemeContext';
+import { CompanyOutreachModal } from './CompanyOutreachModal';
 
 interface EmailTableProps {
   records: EmailRecord[];
+  allRecords?: EmailRecord[];
   mappings: ColumnMappings;
   defaultCountryCode: string;
   onToggleSelectRow: (id: string) => void;
@@ -30,6 +37,10 @@ interface EmailTableProps {
   onInspectRecord: (record: EmailRecord) => void;
   onSendWhatsApp: (record: EmailRecord) => void;
   onPreviewWhatsApp: (record: EmailRecord) => void;
+  onToggleWhatsAppSent?: (recordId: string, value?: boolean) => void;
+  onToggleEmailSent?: (recordId: string, value?: boolean) => void;
+  onSendEmail?: (record: EmailRecord) => void;
+  onMarkCompanyContacted?: (companyName: string, channel: 'whatsapp' | 'email' | 'both', status: boolean) => void;
   currentPage: number;
   pageSize: number;
   onPageChange: (page: number) => void;
@@ -40,6 +51,7 @@ interface EmailTableProps {
 
 export const EmailTable: React.FC<EmailTableProps> = ({
   records,
+  allRecords,
   mappings,
   defaultCountryCode,
   onToggleSelectRow,
@@ -47,6 +59,10 @@ export const EmailTable: React.FC<EmailTableProps> = ({
   onInspectRecord,
   onSendWhatsApp,
   onPreviewWhatsApp,
+  onToggleWhatsAppSent,
+  onToggleEmailSent,
+  onSendEmail,
+  onMarkCompanyContacted,
   currentPage,
   pageSize,
   onPageChange,
@@ -55,6 +71,7 @@ export const EmailTable: React.FC<EmailTableProps> = ({
   viewMode = 'table',
 }) => {
   const { isDark, themeConfig } = useTheme();
+  const [selectedCompanyForOutreach, setSelectedCompanyForOutreach] = useState<string | null>(null);
 
   // Pagination slice
   const totalPages = Math.max(1, Math.ceil(records.length / pageSize));
@@ -120,6 +137,71 @@ export const EmailTable: React.FC<EmailTableProps> = ({
     }
   };
 
+  const renderPhoneClassificationBadge = (phoneInfo: PhoneValidationResult) => {
+    if (!phoneInfo.raw || phoneInfo.raw.trim().length === 0) {
+      return <span className="text-[10px] text-slate-400 italic">No phone</span>;
+    }
+
+    if (!phoneInfo.isValid || phoneInfo.type === 'invalid') {
+      return (
+        <span
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+            isDark ? 'bg-rose-950/70 text-rose-300 border-rose-800' : 'bg-rose-50 text-rose-700 border-rose-200'
+          }`}
+          title="Invalid phone format or insufficient digits"
+        >
+          <PhoneOff className="w-2.5 h-2.5 text-rose-500" />
+          <span>Invalid</span>
+        </span>
+      );
+    }
+
+    if (phoneInfo.type === 'landline') {
+      return (
+        <span
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+            isDark
+              ? 'bg-amber-950/70 text-amber-300 border-amber-800'
+              : 'bg-amber-50 text-amber-800 border-amber-300'
+          }`}
+          title={`Fixed Office Landline: ${phoneInfo.regionOrCity || 'Local Exchange'}. Voice calls only, cannot receive direct WhatsApp.`}
+        >
+          <PhoneCall className="w-2.5 h-2.5 text-amber-500" />
+          <span>Landline {phoneInfo.regionOrCity ? `(${phoneInfo.regionOrCity})` : ''}</span>
+        </span>
+      );
+    }
+
+    if (phoneInfo.type === 'toll_free') {
+      return (
+        <span
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+            isDark ? 'bg-blue-950/70 text-blue-300 border-blue-800' : 'bg-blue-50 text-blue-700 border-blue-200'
+          }`}
+          title="Toll-Free Customer Line"
+        >
+          <Phone className="w-2.5 h-2.5 text-blue-500" />
+          <span>Toll-Free</span>
+        </span>
+      );
+    }
+
+    // Default: Mobile
+    return (
+      <span
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+          isDark
+            ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800'
+            : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+        }`}
+        title="Mobile Cellular Line (WhatsApp outreach verified)"
+      >
+        <Smartphone className="w-2.5 h-2.5 text-emerald-500" />
+        <span>Mobile</span>
+      </span>
+    );
+  };
+
   const extractRowDetails = (rec: EmailRecord) => {
     const ownerName =
       rec.ownerName ||
@@ -150,7 +232,8 @@ export const EmailTable: React.FC<EmailTableProps> = ({
       rec.rawData['Mobile'] ||
       '';
 
-    const phoneInfo = cleanPhoneNumber(rawPhone, defaultCountryCode);
+    const phoneInfo: PhoneValidationResult =
+      rec.phoneValidation || cleanPhoneNumber(rawPhone, defaultCountryCode);
 
     return { ownerName, companyName, address, phoneInfo };
   };
@@ -218,9 +301,20 @@ export const EmailTable: React.FC<EmailTableProps> = ({
                       </div>
 
                       {companyName && (
-                        <div className="flex items-center gap-1.5 text-slate-400 text-xs">
-                          <Building2 className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">{companyName}</span>
+                        <div className="flex items-center justify-between gap-1 text-slate-400 text-xs flex-wrap">
+                          <div className="flex items-center gap-1.5 truncate max-w-[200px]">
+                            <Building2 className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate font-medium">{companyName}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCompanyForOutreach(companyName)}
+                            id={`btn-card-company-outreach-${rec.id}`}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/60 border border-blue-200 dark:border-blue-900 cursor-pointer"
+                            title={`Manage outreach for all contacts in ${companyName}`}
+                          >
+                            <span>Outreach</span>
+                          </button>
                         </div>
                       )}
 
@@ -247,12 +341,47 @@ export const EmailTable: React.FC<EmailTableProps> = ({
                         </div>
                       </div>
 
-                      {phoneInfo.formatted && (
-                        <div className="flex items-center gap-1.5 text-slate-400 text-xs">
-                          <Smartphone className="w-3.5 h-3.5 shrink-0" />
-                          <span className="font-mono">{phoneInfo.formatted}</span>
+                      {phoneInfo.raw ? (
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/40 dark:border-slate-800/60">
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <span className="font-mono text-slate-400">{phoneInfo.formatted || phoneInfo.raw}</span>
+                          </div>
+                          <div>{renderPhoneClassificationBadge(phoneInfo)}</div>
                         </div>
-                      )}
+                      ) : null}
+
+                      {/* Outreach Channel Status Indicators */}
+                      <div className="flex items-center gap-1.5 pt-1 border-t border-slate-200/40 dark:border-slate-800/60 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => onToggleWhatsAppSent && onToggleWhatsAppSent(rec.id, !rec.whatsappSent)}
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium border transition-colors cursor-pointer ${
+                            rec.whatsappSent
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                              : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                          }`}
+                          title={rec.whatsappSent ? 'Marked as WhatsApp sent. Click to unmark.' : 'Click to mark WhatsApp sent'}
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                          <span>{rec.whatsappSent ? 'WA Sent' : 'No WA'}</span>
+                          {rec.whatsappSent && <Check className="w-2.5 h-2.5" />}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onToggleEmailSent && onToggleEmailSent(rec.id, !rec.emailSent)}
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium border transition-colors cursor-pointer ${
+                            rec.emailSent
+                              ? 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
+                              : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                          }`}
+                          title={rec.emailSent ? 'Marked as Email sent. Click to unmark.' : 'Click to mark Email sent'}
+                        >
+                          <Mail className="w-3 h-3" />
+                          <span>{rec.emailSent ? 'Email Sent' : 'No Email'}</span>
+                          {rec.emailSent && <Check className="w-2.5 h-2.5" />}
+                        </button>
+                      </div>
                     </div>
 
                     {/* Diagnosis explanation snippet */}
@@ -296,25 +425,66 @@ export const EmailTable: React.FC<EmailTableProps> = ({
                           <ExternalLink className="w-3.5 h-3.5" />
                         </button>
 
+                        {/* WhatsApp / Landline Adaptive Send Button */}
+                        {phoneInfo.type === 'landline' ? (
+                          <button
+                            type="button"
+                            disabled
+                            title={`Landline fixed office number (${phoneInfo.regionOrCity || 'Fixed Line'}). WhatsApp direct messaging requires mobile lines. Voice calls only.`}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs cursor-not-allowed min-h-[38px] ${
+                              isDark
+                                ? 'bg-amber-950/40 text-amber-300 border border-amber-900/60'
+                                : 'bg-amber-50 text-amber-800 border border-amber-300'
+                            }`}
+                          >
+                            <PhoneCall className="w-3.5 h-3.5 text-amber-500" />
+                            <span>Landline</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onSendWhatsApp(rec)}
+                            disabled={!phoneInfo.isValid || !phoneInfo.isWhatsAppEligible}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[38px] ${
+                              rec.whatsappSent
+                                ? isDark
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                                : phoneInfo.isValid && phoneInfo.isWhatsAppEligible
+                                ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white'
+                                : isDark
+                                ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                                : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                            }`}
+                            title={
+                              phoneInfo.isValid && phoneInfo.isWhatsAppEligible
+                                ? `Send WhatsApp to ${ownerName || 'Contact'}`
+                                : 'Invalid phone number for WhatsApp'
+                            }
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>{rec.whatsappSent ? 'Sent' : 'WhatsApp'}</span>
+                            {rec.whatsappSent && <Check className="w-3 h-3 text-emerald-500 stroke-[3]" />}
+                          </button>
+                        )}
+
+                        {/* Quick Email Send Button */}
                         <button
                           type="button"
-                          onClick={() => onSendWhatsApp(rec)}
-                          disabled={!phoneInfo.isValid}
+                          onClick={() => onSendEmail && onSendEmail(rec)}
+                          id={`btn-card-email-${rec.id}`}
+                          title={`Send email to ${rec.currentEmail}`}
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[38px] ${
-                            rec.whatsappSent
+                            rec.emailSent
                               ? isDark
-                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                              : phoneInfo.isValid
-                              ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white'
-                              : isDark
-                              ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                              : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                ? 'bg-blue-950 text-blue-300 border border-blue-800'
+                                : 'bg-blue-50 text-blue-800 border border-blue-300'
+                              : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white'
                           }`}
                         >
-                          <Send className="w-3.5 h-3.5" />
-                          <span>{rec.whatsappSent ? 'Sent' : 'WhatsApp'}</span>
-                          {rec.whatsappSent && <Check className="w-3 h-3 text-emerald-500 stroke-[3]" />}
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>{rec.emailSent ? 'Sent' : 'Email'}</span>
+                          {rec.emailSent && <Check className="w-3 h-3 text-blue-400 stroke-[3]" />}
                         </button>
                       </div>
                     </div>
@@ -343,7 +513,7 @@ export const EmailTable: React.FC<EmailTableProps> = ({
                 <th className="py-3 px-4 whitespace-nowrap">Deliverability</th>
                 <th className="py-3 px-4">Mail Provider</th>
                 <th className="py-3 px-4 min-w-[170px]">Diagnosis</th>
-                <th className="py-3 px-4 text-right min-w-[190px]">WhatsApp & Action</th>
+                <th className="py-3 px-4 text-right min-w-[270px]">Outreach & Actions</th>
               </tr>
             </thead>
             <tbody
@@ -406,9 +576,30 @@ export const EmailTable: React.FC<EmailTableProps> = ({
                           </div>
 
                           {companyName && (
-                            <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+                            <div className="flex items-center gap-1.5 text-slate-400 text-[11px] flex-wrap">
                               <Building2 className="w-3 h-3 shrink-0" />
-                              <span className="truncate max-w-[180px]">{companyName}</span>
+                              <span className="truncate max-w-[130px] font-medium" title={companyName}>
+                                {companyName}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedCompanyForOutreach(companyName)}
+                                id={`btn-table-company-outreach-${rec.id}`}
+                                title={`Specify outreach status for all contacts in ${companyName}`}
+                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                                  rec.whatsappSent && rec.emailSent
+                                    ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800'
+                                    : rec.whatsappSent
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                                    : rec.emailSent
+                                    ? 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
+                                    : isDark
+                                    ? 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-slate-600'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:text-blue-700 hover:bg-blue-50'
+                                }`}
+                              >
+                                <span>Outreach</span>
+                              </button>
                             </div>
                           )}
 
@@ -448,10 +639,12 @@ export const EmailTable: React.FC<EmailTableProps> = ({
                             )}
                           </div>
 
-                          {phoneInfo.formatted ? (
-                            <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
-                              <Smartphone className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="font-mono">{phoneInfo.formatted}</span>
+                          {phoneInfo.raw ? (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono text-slate-400 text-[11px]">
+                                {phoneInfo.formatted || phoneInfo.raw}
+                              </span>
+                              {renderPhoneClassificationBadge(phoneInfo)}
                             </div>
                           ) : (
                             <span className="text-[11px] text-slate-400 italic">No phone provided</span>
@@ -500,35 +693,101 @@ export const EmailTable: React.FC<EmailTableProps> = ({
                         )}
                       </td>
 
-                      {/* Actions: One-Click WhatsApp & Inspection */}
+                      {/* Actions: One-Click WhatsApp, Email & Inspection */}
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-1.5 justify-end">
-                          {/* WhatsApp Action Button */}
+                          {/* WhatsApp / Landline Action Button */}
+                          {phoneInfo.type === 'landline' ? (
+                            <button
+                              type="button"
+                              disabled
+                              id={`btn-whatsapp-${rec.id}`}
+                              title={`Landline fixed office number (${phoneInfo.regionOrCity || 'Fixed Line'}). WhatsApp direct messaging requires mobile lines. Voice calls only.`}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold shadow-xs cursor-not-allowed min-h-[34px] ${
+                                isDark
+                                  ? 'bg-amber-950/40 text-amber-300 border border-amber-900/60'
+                                  : 'bg-amber-50 text-amber-800 border border-amber-300'
+                              }`}
+                            >
+                              <PhoneCall className="w-3.5 h-3.5 text-amber-500" />
+                              <span>Landline</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => onSendWhatsApp(rec)}
+                              disabled={!phoneInfo.isValid || !phoneInfo.isWhatsAppEligible}
+                              id={`btn-whatsapp-${rec.id}`}
+                              title={
+                                phoneInfo.isValid && phoneInfo.isWhatsAppEligible
+                                  ? `Open WhatsApp to message ${ownerName || 'Owner'} (${phoneInfo.formatted})`
+                                  : 'Invalid phone number for WhatsApp'
+                              }
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[34px] ${
+                                rec.whatsappSent
+                                  ? isDark
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                    : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                                  : phoneInfo.isValid && phoneInfo.isWhatsAppEligible
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white'
+                                  : isDark
+                                  ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                                  : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                              }`}
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              <span>{rec.whatsappSent ? 'WA Sent' : 'WhatsApp'}</span>
+                              {rec.whatsappSent && <Check className="w-3 h-3 text-emerald-500 stroke-[3]" />}
+                            </button>
+                          )}
+
+                          {/* Quick Toggle WhatsApp Sent status */}
                           <button
                             type="button"
-                            onClick={() => onSendWhatsApp(rec)}
-                            disabled={!phoneInfo.isValid}
-                            id={`btn-whatsapp-${rec.id}`}
-                            title={
-                              phoneInfo.isValid
-                                ? `Open WhatsApp to message ${ownerName || 'Owner'} (${phoneInfo.formatted})`
-                                : 'No valid phone number detected for this row'
-                            }
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[34px] ${
+                            onClick={() => onToggleWhatsAppSent && onToggleWhatsAppSent(rec.id, !rec.whatsappSent)}
+                            id={`btn-toggle-wa-${rec.id}`}
+                            title={rec.whatsappSent ? 'Marked as WhatsApp sent. Click to unmark.' : 'Click to mark WhatsApp sent'}
+                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer min-h-[34px] min-w-[34px] flex items-center justify-center ${
                               rec.whatsappSent
-                                ? isDark
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                                : phoneInfo.isValid
-                                ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white'
-                                : isDark
-                                ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                                : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                                : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-800'
                             }`}
                           >
-                            <Send className="w-3.5 h-3.5" />
-                            <span>{rec.whatsappSent ? 'Sent' : 'WhatsApp'}</span>
-                            {rec.whatsappSent && <Check className="w-3 h-3 text-emerald-500 stroke-[3]" />}
+                            <Check className={`w-3.5 h-3.5 ${rec.whatsappSent ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`} />
+                          </button>
+
+                          {/* Email Send & Action Button */}
+                          <button
+                            type="button"
+                            onClick={() => onSendEmail && onSendEmail(rec)}
+                            id={`btn-email-${rec.id}`}
+                            title={`Send Email to ${rec.currentEmail}`}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[34px] ${
+                              rec.emailSent
+                                ? isDark
+                                  ? 'bg-blue-950 text-blue-300 border border-blue-800'
+                                  : 'bg-blue-50 text-blue-800 border border-blue-300'
+                                : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white'
+                            }`}
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                            <span>{rec.emailSent ? 'Email Sent' : 'Email'}</span>
+                            {rec.emailSent && <Check className="w-3 h-3 text-blue-400 stroke-[3]" />}
+                          </button>
+
+                          {/* Quick Toggle Email Sent status */}
+                          <button
+                            type="button"
+                            onClick={() => onToggleEmailSent && onToggleEmailSent(rec.id, !rec.emailSent)}
+                            id={`btn-toggle-email-${rec.id}`}
+                            title={rec.emailSent ? 'Marked as Email sent. Click to unmark.' : 'Click to mark Email sent'}
+                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer min-h-[34px] min-w-[34px] flex items-center justify-center ${
+                              rec.emailSent
+                                ? 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
+                                : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <Check className={`w-3.5 h-3.5 ${rec.emailSent ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
                           </button>
 
                           {/* Preview message before sending */}
@@ -626,6 +885,21 @@ export const EmailTable: React.FC<EmailTableProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Company Outreach Manager Modal */}
+      <CompanyOutreachModal
+        isOpen={!!selectedCompanyForOutreach}
+        companyName={selectedCompanyForOutreach}
+        records={allRecords || records}
+        onClose={() => setSelectedCompanyForOutreach(null)}
+        onMarkCompanyContacted={(comp, channel, status) => {
+          onMarkCompanyContacted && onMarkCompanyContacted(comp, channel, status);
+        }}
+        onToggleWhatsAppSent={onToggleWhatsAppSent}
+        onToggleEmailSent={onToggleEmailSent}
+        onSendEmail={onSendEmail}
+        onSendWhatsApp={onSendWhatsApp}
+      />
     </div>
   );
 };

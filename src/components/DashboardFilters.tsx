@@ -10,6 +10,14 @@ import {
   X,
   LayoutGrid,
   Table as TableIcon,
+  Smartphone,
+  PhoneCall,
+  PhoneOff,
+  Phone,
+  Send,
+  Mail,
+  MessageSquare,
+  Check,
 } from 'lucide-react';
 import { FilterState, VerificationSummary } from '../types';
 import { useTheme } from '../context/ThemeContext';
@@ -28,6 +36,7 @@ interface DashboardFiltersProps {
   allFilteredSelected: boolean;
   viewMode?: 'table' | 'cards';
   onViewModeChange?: (mode: 'table' | 'cards') => void;
+  onBatchMarkContacted?: (channel: 'whatsapp' | 'email' | 'both', status: boolean) => void;
 }
 
 export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
@@ -44,6 +53,7 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
   allFilteredSelected,
   viewMode = 'table',
   onViewModeChange,
+  onBatchMarkContacted,
 }) => {
   const { isDark, themeConfig } = useTheme();
 
@@ -249,8 +259,8 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
           )}
         </div>
 
-        {/* Selection & Provider Info */}
-        <div className="flex items-center justify-between sm:justify-end gap-3 text-xs">
+        {/* Selection & Batch Contacted Controls */}
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 text-xs">
           <button
             onClick={onToggleSelectAllFiltered}
             id="btn-select-all-filtered"
@@ -269,7 +279,272 @@ export const DashboardFilters: React.FC<DashboardFiltersProps> = ({
                 : `Select all (${totalFilteredCount})`}
             </span>
           </button>
+
+          {selectedCount > 0 && onBatchMarkContacted && (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => onBatchMarkContacted('whatsapp', true)}
+                id="btn-batch-mark-whatsapp"
+                title="Mark selected contacts/companies as contacted via WhatsApp"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold text-xs transition-colors cursor-pointer min-h-[30px] ${
+                  isDark
+                    ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-800 hover:bg-emerald-900'
+                    : 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                }`}
+              >
+                <MessageSquare className="w-3 h-3 text-emerald-600" />
+                <span>Mark WhatsApp ({selectedCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onBatchMarkContacted('email', true)}
+                id="btn-batch-mark-email"
+                title="Mark selected contacts/companies as contacted via Email"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold text-xs transition-colors cursor-pointer min-h-[30px] ${
+                  isDark
+                    ? 'bg-blue-950/70 text-blue-300 border border-blue-800 hover:bg-blue-900'
+                    : 'bg-blue-50 text-blue-800 border border-blue-300 hover:bg-blue-100'
+                }`}
+              >
+                <Mail className="w-3 h-3 text-blue-600" />
+                <span>Mark Email ({selectedCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onBatchMarkContacted('both', false)}
+                id="btn-batch-clear-contacted"
+                title="Clear contacted status for selected"
+                className={`p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded text-xs cursor-pointer min-h-[30px]`}
+              >
+                Clear
+              </button>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Phone Line Classification Filter Pills (Mobile vs Landline) */}
+      <div
+        className={`flex flex-wrap items-center gap-2 pt-2.5 mt-2.5 border-t text-xs ${
+          isDark ? 'border-slate-800' : 'border-slate-100'
+        }`}
+      >
+        <span
+          className={`font-bold flex items-center gap-1.5 text-[11px] uppercase tracking-wider ${
+            isDark ? 'text-slate-400' : 'text-slate-500'
+          }`}
+        >
+          <Phone className="w-3 h-3 text-blue-500" />
+          <span>Telephony:</span>
+        </span>
+
+        <button
+          type="button"
+          onClick={() => onFilterChange({ phoneFilter: 'all' })}
+          id="filter-phone-all"
+          className={`px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+            !filters.phoneFilter || filters.phoneFilter === 'all'
+              ? isDark
+                ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40'
+                : 'bg-blue-50 text-blue-700 border border-blue-200'
+              : isDark
+              ? 'text-slate-400 hover:bg-slate-800'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          All Phone Types
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onFilterChange({ phoneFilter: 'mobile' })}
+          id="filter-phone-mobile"
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+            filters.phoneFilter === 'mobile'
+              ? isDark
+                ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40'
+                : 'bg-emerald-50 text-emerald-800 border border-emerald-300 font-semibold'
+              : isDark
+              ? 'text-emerald-400/90 hover:bg-slate-800'
+              : 'text-emerald-700 hover:bg-emerald-50/60'
+          }`}
+          title="Filter only mobile numbers (WhatsApp outreach eligible)"
+        >
+          <Smartphone className="w-3 h-3 text-emerald-500" />
+          <span>Mobile ({summary.mobilePhoneCount || 0})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onFilterChange({ phoneFilter: 'landline' })}
+          id="filter-phone-landline"
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+            filters.phoneFilter === 'landline'
+              ? isDark
+                ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40'
+                : 'bg-amber-50 text-amber-800 border border-amber-300 font-semibold'
+              : isDark
+              ? 'text-amber-400/90 hover:bg-slate-800'
+              : 'text-amber-700 hover:bg-amber-50/60'
+          }`}
+          title="Filter fixed-line office & commercial landlines (Requires voice call, non-WhatsApp direct)"
+        >
+          <PhoneCall className="w-3 h-3 text-amber-500" />
+          <span>Landline ({summary.landlinePhoneCount || 0})</span>
+        </button>
+
+        {Boolean(summary.invalidPhoneCount && summary.invalidPhoneCount > 0) && (
+          <button
+            type="button"
+            onClick={() => onFilterChange({ phoneFilter: 'invalid' })}
+            id="filter-phone-invalid"
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+              filters.phoneFilter === 'invalid'
+                ? isDark
+                  ? 'bg-rose-600/30 text-rose-300 border border-rose-500/40'
+                  : 'bg-rose-50 text-rose-800 border border-rose-300 font-semibold'
+                : isDark
+                ? 'text-rose-400/90 hover:bg-slate-800'
+                : 'text-rose-700 hover:bg-rose-50/60'
+            }`}
+            title="Filter invalid or malformed telephone numbers"
+          >
+            <PhoneOff className="w-3 h-3 text-rose-500" />
+            <span>Invalid Phone ({summary.invalidPhoneCount})</span>
+          </button>
+        )}
+      </div>
+
+      {/* Outreach & Contact Status Filter Pills */}
+      <div
+        className={`flex flex-wrap items-center gap-2 pt-2.5 mt-2.5 border-t text-xs ${
+          isDark ? 'border-slate-800' : 'border-slate-100'
+        }`}
+      >
+        <span
+          className={`font-bold flex items-center gap-1.5 text-[11px] uppercase tracking-wider ${
+            isDark ? 'text-slate-400' : 'text-slate-500'
+          }`}
+        >
+          <Send className="w-3 h-3 text-emerald-500" />
+          <span>Outreach Status:</span>
+        </span>
+
+        <button
+          type="button"
+          onClick={() => onFilterChange({ outreachFilter: 'all' })}
+          id="filter-outreach-all"
+          className={`px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+            !filters.outreachFilter || filters.outreachFilter === 'all'
+              ? isDark
+                ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40'
+                : 'bg-blue-50 text-blue-700 border border-blue-200'
+              : isDark
+              ? 'text-slate-400 hover:bg-slate-800'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          All ({summary.total})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onFilterChange({ outreachFilter: 'contacted_any' })}
+          id="filter-outreach-any"
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+            filters.outreachFilter === 'contacted_any'
+              ? isDark
+                ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-semibold'
+                : 'bg-emerald-50 text-emerald-800 border border-emerald-300 font-semibold'
+              : isDark
+              ? 'text-emerald-400/90 hover:bg-slate-800'
+              : 'text-emerald-700 hover:bg-emerald-50/60'
+          }`}
+          title="Filter contacts/companies that have been contacted via either WhatsApp or Email"
+        >
+          <Check className="w-3 h-3 text-emerald-500" />
+          <span>Any Contacted ({summary.contactedCount || 0})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onFilterChange({ outreachFilter: 'whatsapp_sent' })}
+          id="filter-outreach-whatsapp"
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+            filters.outreachFilter === 'whatsapp_sent'
+              ? isDark
+                ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-semibold'
+                : 'bg-emerald-50 text-emerald-800 border border-emerald-300 font-semibold'
+              : isDark
+              ? 'text-emerald-400/90 hover:bg-slate-800'
+              : 'text-emerald-700 hover:bg-emerald-50/60'
+          }`}
+          title="Filter contacts/companies contacted via WhatsApp"
+        >
+          <MessageSquare className="w-3 h-3 text-emerald-500" />
+          <span>WhatsApp Sent ({summary.whatsappSentCount || 0})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onFilterChange({ outreachFilter: 'email_sent' })}
+          id="filter-outreach-email"
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+            filters.outreachFilter === 'email_sent'
+              ? isDark
+                ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40 font-semibold'
+                : 'bg-blue-50 text-blue-800 border border-blue-300 font-semibold'
+              : isDark
+              ? 'text-blue-400/90 hover:bg-slate-800'
+              : 'text-blue-700 hover:bg-blue-50/60'
+          }`}
+          title="Filter contacts/companies contacted via Email"
+        >
+          <Mail className="w-3 h-3 text-blue-500" />
+          <span>Email Sent ({summary.emailSentCount || 0})</span>
+        </button>
+
+        {Boolean(summary.bothContactedCount && summary.bothContactedCount > 0) && (
+          <button
+            type="button"
+            onClick={() => onFilterChange({ outreachFilter: 'both_sent' })}
+            id="filter-outreach-both"
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+              filters.outreachFilter === 'both_sent'
+                ? isDark
+                  ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40 font-semibold'
+                  : 'bg-purple-50 text-purple-800 border border-purple-300 font-semibold'
+                : isDark
+                ? 'text-purple-400/90 hover:bg-slate-800'
+                : 'text-purple-700 hover:bg-purple-50/60'
+            }`}
+            title="Filter contacts/companies contacted via both WhatsApp and Email"
+          >
+            <Check className="w-3 h-3 text-purple-500" />
+            <span>Both Channels ({summary.bothContactedCount})</span>
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => onFilterChange({ outreachFilter: 'not_contacted' })}
+          id="filter-outreach-not-contacted"
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors cursor-pointer text-xs ${
+            filters.outreachFilter === 'not_contacted'
+              ? isDark
+                ? 'bg-slate-700 text-white border border-slate-600 font-semibold'
+                : 'bg-slate-200 text-slate-900 border border-slate-300 font-semibold'
+              : isDark
+              ? 'text-slate-400 hover:bg-slate-800'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+          title="Filter uncontacted companies / records"
+        >
+          <span>Not Contacted ({summary.notContactedCount ?? (summary.total - (summary.contactedCount || 0))})</span>
+        </button>
       </div>
     </div>
   );
