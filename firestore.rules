@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Isolated per-user collection tree
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && 
+        request.resource.data.uid == userId &&
+        request.resource.data.email is string &&
+        request.resource.data.email.size() <= 256;
+      allow update: if isOwner(userId) &&
+        request.resource.data.uid == userId;
+      allow delete: if isOwner(userId);
+
+      // Datasets uploaded by this specific user
+      match /datasets/{datasetId} {
+        allow list, get: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+          isValidId(datasetId) &&
+          request.resource.data.userId == userId &&
+          request.resource.data.fileName is string &&
+          request.resource.data.fileName.size() <= 300;
+        allow update: if isOwner(userId) &&
+          isValidId(datasetId) &&
+          request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(datasetId);
+
+        // Individual records extracted from the user's uploaded dataset
+        match /records/{recordId} {
+          allow list, get: if isOwner(userId);
+          allow create: if isOwner(userId) &&
+            isValidId(recordId) &&
+            request.resource.data.userId == userId &&
+            request.resource.data.datasetId == datasetId &&
+            request.resource.data.currentEmail is string &&
+            request.resource.data.currentEmail.size() <= 320;
+          allow update: if isOwner(userId) &&
+            isValidId(recordId) &&
+            request.resource.data.userId == userId &&
+            request.resource.data.datasetId == datasetId;
+          allow delete: if isOwner(userId) && isValidId(recordId);
+        }
+      }
+    }
+  }
+}

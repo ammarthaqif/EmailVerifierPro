@@ -6,11 +6,14 @@ import {
   RefreshCw,
   MessageSquare,
   BookOpen,
+  FolderOpen,
   Menu,
   X,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { ThemeSelector } from './ThemeSelector';
+import { UserAuthButton } from './UserAuthButton';
 
 interface NavbarProps {
   onLoadSample: () => void;
@@ -20,6 +23,7 @@ interface NavbarProps {
   totalRecords: number;
   onOpenWhatsAppTemplate?: () => void;
   onOpenUserGuide?: () => void;
+  onOpenSavedDatasets?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -30,8 +34,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   totalRecords,
   onOpenWhatsAppTemplate,
   onOpenUserGuide,
+  onOpenSavedDatasets,
 }) => {
   const { isDark, themeConfig } = useTheme();
+  const { user, savedDatasets } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -106,6 +112,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
+          {/* User Saved Datasets button */}
+          {user && onOpenSavedDatasets && (
+            <button
+              onClick={onOpenSavedDatasets}
+              id="btn-nav-my-datasets"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer min-h-[38px] ${
+                isDark
+                  ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+              title="View your saved datasets in Cloud Firestore"
+            >
+              <FolderOpen className="w-3.5 h-3.5 text-blue-500" />
+              <span>Datasets</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">
+                {savedDatasets.length}
+              </span>
+            </button>
+          )}
+
           {!hasData && (
             <button
               onClick={onLoadSample}
@@ -146,10 +172,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </>
           )}
+
+          {/* Google Auth & User Database Control */}
+          <UserAuthButton onOpenSavedDatasets={onOpenSavedDatasets || (() => {})} />
         </div>
 
         {/* Mobile Hamburger & Theme Toggle Button */}
         <div className="flex md:hidden items-center gap-1.5">
+          <UserAuthButton onOpenSavedDatasets={onOpenSavedDatasets || (() => {})} />
           <ThemeSelector />
 
           <button
@@ -188,6 +218,28 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <BookOpen className="w-4 h-4 text-blue-500" />
               <span>User Manual & Guide</span>
+            </button>
+          )}
+
+          {user && onOpenSavedDatasets && (
+            <button
+              onClick={() => {
+                onOpenSavedDatasets();
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+                isDark
+                  ? 'bg-slate-800 text-slate-200 border-slate-700'
+                  : 'bg-white text-slate-700 border-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-blue-500" />
+                <span>My Saved Datasets</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300">
+                {savedDatasets.length}
+              </span>
             </button>
           )}
 

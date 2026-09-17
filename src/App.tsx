@@ -13,6 +13,10 @@ import { WhatsAppTemplateModal } from './components/WhatsAppTemplateModal';
 import { WhatsAppSendModal } from './components/WhatsAppSendModal';
 import { UserGuideModal } from './components/UserGuideModal';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { CloudDatabaseSyncBar } from './components/CloudDatabaseSyncBar';
+import { SavedDatasetsModal } from './components/SavedDatasetsModal';
+import { SavedDatasetMeta, updateRecordOutreach } from './lib/firebase';
 import {
   EmailRecord,
   VerificationResult,
@@ -44,6 +48,7 @@ import {
   SlidersHorizontal,
   MessageSquare,
   BookOpen,
+  FolderOpen,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -68,6 +73,16 @@ const setSafeLocalStorage = (key: string, value: string): void => {
 
 function DashboardApp() {
   const { isDark } = useTheme();
+  const {
+    user,
+    saveDatasetToDb,
+    dbSyncStatus,
+    isSavingToDb,
+    lastSavedAt,
+    savedDatasets,
+    loginWithGoogle,
+  } = useAuth();
+
   const [viewMode, setViewMode] = useState<'table' | 'cards'>(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       return 'cards';
@@ -76,6 +91,8 @@ function DashboardApp() {
   });
 
   const [sheetData, setSheetData] = useState<ParsedSheetData | null>(null);
+  const [currentDatasetId, setCurrentDatasetId] = useState<string | null>(null);
+  const [isSavedDatasetsModalOpen, setIsSavedDatasetsModalOpen] = useState(false);
   const [records, setRecords] = useState<EmailRecord[]>([]);
   const [mappings, setMappings] = useState<ColumnMappings>({
     emailColumn: '',
@@ -174,9 +191,57 @@ function DashboardApp() {
     setIsVerifying(false);
   }, []);
 
+  // Sync current dataset and records to user's private Firestore database
+  const syncCurrentDatasetToCloud = useCallback(
+    async (targetRecords?: EmailRecord[], dsId?: string) => {
+      if (!user || !sheetData) return;
+      const recs = targetRecords || records;
+      if (recs.length === 0) return;
+
+      const id = dsId || currentDatasetId || `dataset_${Date.now()}`;
+      if (!currentDatasetId) {
+        setCurrentDatasetId(id);
+      }
+
+      const validCount = recs.filter((r) => r.verification?.status === 'valid').length;
+      const riskyCount = recs.filter((r) => r.verification?.status === 'risky').length;
+      const invalidCount = recs.filter((r) => r.verification?.status === 'invalid').length;
+      const untestedCount = recs.filter(
+        (r) => !r.verification || r.verification.status === 'untested'
+      ).length;
+      const whatsappSentCount = recs.filter((r) => r.whatsappSent).length;
+      const emailSentCount = recs.filter((r) => r.emailSent).length;
+
+      const meta = {
+        id,
+        fileName: sheetData.fileName,
+        sheetName: sheetData.selectedSheet,
+        rowCount: recs.length,
+        validCount,
+        riskyCount,
+        invalidCount,
+        untestedCount,
+        whatsappSentCount,
+        emailSentCount,
+        columnMappings: mappings,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        await saveDatasetToDb(meta, recs);
+      } catch (err) {
+        console.error('Error auto-syncing dataset to Firestore:', err);
+      }
+    },
+    [user, sheetData, records, currentDatasetId, mappings, saveDatasetToDb]
+  );
+
   // When new file or dataset is parsed
   const handleDataParsed = useCallback(
     (parsed: ParsedSheetData) => {
+      const newDatasetId = `dataset_${Date.now()}`;
+      setCurrentDatasetId(newDatasetId);
       setSheetData(parsed);
       setRecords(parsed.records);
       setMappings(parsed.columnMappings);
@@ -195,6 +260,42 @@ function DashboardApp() {
     [runBatchVerification]
   );
 
+  // Load dataset previously stored in user's cloud database
+  const handleLoadSavedDataset = (meta: SavedDatasetMeta, loadedRecords: EmailRecord[]) => {
+    const headers = [
+      meta.columnMappings.emailColumn,
+      meta.columnMappings.phoneColumn,
+      meta.columnMappings.ownerNameColumn,
+      meta.columnMappings.companyNameColumn,
+      meta.columnMappings.addressColumn,
+    ].filter(Boolean) as string[];
+
+    const reconstructedSheet: ParsedSheetData = {
+      fileName: meta.fileName,
+      sheetNames: [meta.sheetName || 'Sheet1'],
+      selectedSheet: meta.sheetName || 'Sheet1',
+      columns: headers,
+      records: loadedRecords,
+      columnMappings: meta.columnMappings,
+      detectedEmailColumn: meta.columnMappings.emailColumn || '',
+    };
+
+    setSheetData(reconstructedSheet);
+    setRecords(loadedRecords);
+    setMappings(meta.columnMappings);
+    setCurrentDatasetId(meta.id);
+    setCurrentPage(1);
+    setFilters({
+      search: '',
+      status: 'all',
+      phoneFilter: 'all',
+      outreachFilter: 'all',
+      provider: 'all',
+      minScore: 0,
+      maxScore: 100,
+    });
+  };
+
   // Load sample dataset
   const handleLoadSample = useCallback(() => {
     const buffer = generateSampleDataset();
@@ -206,6 +307,7 @@ function DashboardApp() {
   const handleReset = () => {
     setSheetData(null);
     setRecords([]);
+    setCurrentDatasetId(null);
     setMappings({
       emailColumn: '',
       phoneColumn: '',
@@ -321,10 +423,12 @@ function DashboardApp() {
 
   // Toggle individual WhatsApp sent status
   const handleToggleWhatsAppSent = (recordId: string, value?: boolean) => {
+    let targetNewStatus = false;
     setRecords((prev) =>
       prev.map((r) => {
         if (r.id !== recordId) return r;
         const newStatus = value !== undefined ? value : !r.whatsappSent;
+        targetNewStatus = newStatus;
         return {
           ...r,
           whatsappSent: newStatus,
@@ -332,14 +436,23 @@ function DashboardApp() {
         };
       })
     );
+
+    if (user && currentDatasetId) {
+      updateRecordOutreach(user.uid, currentDatasetId, recordId, {
+        whatsappSent: targetNewStatus,
+        whatsappSentAt: targetNewStatus ? new Date().toISOString() : undefined,
+      }).catch(console.error);
+    }
   };
 
   // Toggle individual Email sent status
   const handleToggleEmailSent = (recordId: string, value?: boolean) => {
+    let targetNewStatus = false;
     setRecords((prev) =>
       prev.map((r) => {
         if (r.id !== recordId) return r;
         const newStatus = value !== undefined ? value : !r.emailSent;
+        targetNewStatus = newStatus;
         return {
           ...r,
           emailSent: newStatus,
@@ -347,6 +460,13 @@ function DashboardApp() {
         };
       })
     );
+
+    if (user && currentDatasetId) {
+      updateRecordOutreach(user.uid, currentDatasetId, recordId, {
+        emailSent: targetNewStatus,
+        emailSentAt: targetNewStatus ? new Date().toISOString() : undefined,
+      }).catch(console.error);
+    }
   };
 
   // Quick email dispatch via standard mailto protocol
@@ -689,6 +809,7 @@ function DashboardApp() {
         totalRecords={records.length}
         onOpenWhatsAppTemplate={() => setIsWhatsAppTemplateModalOpen(true)}
         onOpenUserGuide={() => setIsUserGuideOpen(true)}
+        onOpenSavedDatasets={() => setIsSavedDatasetsModalOpen(true)}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
@@ -713,18 +834,35 @@ function DashboardApp() {
               >
                 Upload your company spreadsheet with director or owner names, corporate emails, phone numbers, and addresses. Verify deliverability, flag invalid addresses, and send prescripted WhatsApp messages with automatic data interpolation.
               </p>
-              <button
-                onClick={() => setIsUserGuideOpen(true)}
-                id="btn-hero-user-guide"
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors shadow-2xs cursor-pointer min-h-[36px] ${
-                  isDark
-                    ? 'bg-blue-950/80 text-blue-300 border-blue-800 hover:bg-blue-900'
-                    : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-                }`}
-              >
-                <BookOpen className="w-3.5 h-3.5 text-blue-500" />
-                <span>New here? Read the User Manual & Best Practice Guide</span>
-              </button>
+              <div className="flex items-center justify-center gap-2.5 flex-wrap">
+                <button
+                  onClick={() => setIsUserGuideOpen(true)}
+                  id="btn-hero-user-guide"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-full border transition-colors shadow-2xs cursor-pointer min-h-[36px] ${
+                    isDark
+                      ? 'bg-blue-950/80 text-blue-300 border-blue-800 hover:bg-blue-900'
+                      : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+                  <span>User Manual & Guide</span>
+                </button>
+
+                {user && (
+                  <button
+                    onClick={() => setIsSavedDatasetsModalOpen(true)}
+                    id="btn-hero-my-datasets"
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-colors shadow-2xs cursor-pointer min-h-[36px] ${
+                      isDark
+                        ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5 text-blue-500" />
+                    <span>My Cloud Datasets ({savedDatasets.length})</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             <FileUploadZone
@@ -736,6 +874,14 @@ function DashboardApp() {
         ) : (
           /* Dashboard State: Active Dataset */
           <div className="space-y-6">
+            {/* Cloud Database Sync Status & Actions */}
+            <CloudDatabaseSyncBar
+              fileName={sheetData.fileName}
+              totalRecords={records.length}
+              onOpenSavedDatasets={() => setIsSavedDatasetsModalOpen(true)}
+              onSyncNow={() => syncCurrentDatasetToCloud()}
+            />
+
             {/* Sheet & Column Mapping Bar */}
             <ColumnMappingBar
               fileName={sheetData.fileName}
@@ -899,6 +1045,14 @@ function DashboardApp() {
         onLoadSample={handleLoadSample}
       />
 
+      {/* Cloud Saved Datasets Modal for Logged In User */}
+      <SavedDatasetsModal
+        isOpen={isSavedDatasetsModalOpen}
+        onClose={() => setIsSavedDatasetsModalOpen(false)}
+        onLoadDataset={handleLoadSavedDataset}
+        currentDatasetId={currentDatasetId || undefined}
+      />
+
       {/* Dashboard Footer with Signature */}
       <footer
         id="app-footer"
@@ -952,7 +1106,9 @@ function DashboardApp() {
 export default function App() {
   return (
     <ThemeProvider>
-      <DashboardApp />
+      <AuthProvider>
+        <DashboardApp />
+      </AuthProvider>
     </ThemeProvider>
   );
 }

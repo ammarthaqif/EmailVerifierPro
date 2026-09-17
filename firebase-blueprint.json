@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with basic information and login state",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastLoginAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "UploadedDataset": {
+      "title": "UploadedDataset",
+      "description": "Uploaded spreadsheet or contact dataset belonging to a specific user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "sheetName": { "type": "string" },
+        "rowCount": { "type": "number" },
+        "validCount": { "type": "number" },
+        "riskyCount": { "type": "number" },
+        "invalidCount": { "type": "number" },
+        "whatsappSentCount": { "type": "number" },
+        "emailSentCount": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "fileName", "rowCount", "createdAt"]
+    },
+    "DatasetRecord": {
+      "title": "DatasetRecord",
+      "description": "Individual verified email, phone, and company record extracted from the uploaded file",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "datasetId": { "type": "string" },
+        "userId": { "type": "string" },
+        "rowIndex": { "type": "number" },
+        "currentEmail": { "type": "string" },
+        "originalEmail": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "companyName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "status": { "type": "string" },
+        "deliverabilityScore": { "type": "number" },
+        "provider": { "type": "string" },
+        "whatsappSent": { "type": "boolean" },
+        "emailSent": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "datasetId", "userId", "currentEmail"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document isolated to the authenticated user"
+    },
+    "/users/{userId}/datasets/{datasetId}": {
+      "schema": "UploadedDataset",
+      "description": "Metadata for each dataset uploaded and saved by the user"
+    },
+    "/users/{userId}/datasets/{datasetId}/records/{recordId}": {
+      "schema": "DatasetRecord",
+      "description": "Granular record data extracted from the uploaded spreadsheet"
+    }
+  }
+}
