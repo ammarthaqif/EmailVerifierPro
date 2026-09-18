@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FileSpreadsheet, ClipboardList, Check, Download, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, ClipboardList, Check, Download, AlertCircle, Server, Cpu, Zap, Loader2 } from 'lucide-react';
 import { parseExcelFile, parseRawEmailList, generateSampleDataset } from '../utils/excelHelper';
 import { ParsedSheetData } from '../utils/excelHelper';
 import { useTheme } from '../context/ThemeContext';
@@ -20,9 +20,19 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [parsingError, setParsingError] = useState<string | null>(null);
+  const [isServerProcessing, setIsServerProcessing] = useState(false);
+  const [serverStatusText, setServerStatusText] = useState<string>('');
+  const [processingFileName, setProcessingFileName] = useState<string>('');
+  const [processingFileSize, setProcessingFileSize] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = (file: File) => {
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const handleFile = async (file: File) => {
     setParsingError(null);
     const validExtensions = ['.xlsx', '.xls', '.csv'];
     const lowerName = file.name.toLowerCase();
@@ -33,24 +43,63 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    setProcessingFileName(file.name);
+    setProcessingFileSize(formatFileSize(file.size));
+    setIsServerProcessing(true);
+    setServerStatusText('Streaming spreadsheet to dedicated Web Server engine...');
+
+    try {
+      // Stream raw binary file directly to server - Zero CPU freezing on user's device
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+      setServerStatusText('Web Server parsing rows, unzipping cells & matching contact columns...');
+
+      const res = await fetch('/api/process-spreadsheet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-File-Name': encodeURIComponent(file.name),
+        },
+        body: file,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const parsedData = await res.json();
+        if (parsedData && Array.isArray(parsedData.records)) {
+          if (parsedData.records.length === 0) {
+            setParsingError('No rows were found in the uploaded file.');
+            setIsServerProcessing(false);
+            return;
+          }
+          setIsServerProcessing(false);
+          onDataParsed(parsedData);
+          return;
+        }
+      }
+      throw new Error(`Server returned status ${res.status}: ${res.statusText}`);
+    } catch (serverErr: any) {
+      console.warn('Web server processing failed or offline, falling back to background parser:', serverErr);
+      setServerStatusText('Web server busy, completing fallback parsing in background...');
+
+      // Resilient fallback to client-side parsing only if web server is unreachable
       try {
-        const buffer = e.target?.result as ArrayBuffer;
+        const buffer = await file.arrayBuffer();
         const parsed = parseExcelFile(buffer, file.name);
         if (parsed.records.length === 0) {
           setParsingError('No rows were found in the uploaded file.');
+          setIsServerProcessing(false);
           return;
         }
+        setIsServerProcessing(false);
         onDataParsed(parsed);
       } catch (err: any) {
+        setIsServerProcessing(false);
         setParsingError(`Failed to parse Excel file: ${err.message || 'Unknown error'}`);
       }
-    };
-    reader.onerror = () => {
-      setParsingError('Error reading file from disk.');
-    };
-    reader.readAsArrayBuffer(file);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -167,8 +216,80 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
         </div>
       )}
 
-      {activeTab === 'upload' ? (
+      {/* Server-Side Processing Live State */}
+      {isServerProcessing ? (
+        <div
+          id="server-processing-indicator"
+          className={`border-2 border-dashed rounded-xl p-8 sm:p-12 text-center transition-all ${
+            isDark
+              ? 'border-blue-700/80 bg-blue-950/40 text-slate-100'
+              : 'border-blue-300 bg-blue-50/60 text-slate-900'
+          }`}
+        >
+          <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4">
+            <div className="absolute inset-0 rounded-2xl bg-blue-500/20 animate-ping opacity-60" />
+            <div
+              className={`relative w-full h-full rounded-2xl flex items-center justify-center shadow-md border ${
+                isDark
+                  ? 'bg-slate-850 border-blue-600 text-blue-400'
+                  : 'bg-white border-blue-200 text-blue-600'
+              }`}
+            >
+              <Server className="w-8 h-8 sm:w-10 sm:h-10 animate-pulse" />
+            </div>
+            <div className="absolute -bottom-1 -right-1 p-1 rounded-full bg-emerald-500 text-white shadow-sm">
+              <Zap className="w-3.5 h-3.5 fill-current" />
+            </div>
+          </div>
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase mb-2 text-blue-700 dark:text-blue-300 bg-blue-100/80 dark:bg-blue-900/60 border border-blue-200 dark:border-blue-800">
+            <Cpu className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+            <span>Web Server Engine Active</span>
+          </div>
+
+          <h3 className="text-base sm:text-lg font-bold mb-1.5 text-slate-900 dark:text-slate-100">
+            {serverStatusText || 'Processing Spreadsheet on Web Server...'}
+          </h3>
+
+          <p className="text-xs text-slate-600 dark:text-slate-400 max-w-md mx-auto mb-4">
+            File: <strong className="font-semibold text-slate-800 dark:text-slate-200">{processingFileName}</strong>
+            {processingFileSize ? ` (${processingFileSize})` : ''} — Offloaded to web server to prevent browser freezing.
+          </p>
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold">
+            <Check className="w-4 h-4 text-emerald-600" />
+            <span>0% Laptop CPU Usage — Streaming directly to Cloud Server</span>
+          </div>
+        </div>
+      ) : activeTab === 'upload' ? (
         <div>
+          {/* Server Acceleration Benefit Banner */}
+          <div
+            className={`mb-3.5 p-2.5 sm:p-3 rounded-xl border flex items-center justify-between gap-3 text-xs ${
+              isDark
+                ? 'bg-slate-850/80 border-slate-700/80 text-slate-300'
+                : 'bg-gradient-to-r from-blue-50/80 to-indigo-50/60 border-blue-100 text-slate-700'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                <Server className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                  Web Server-Powered Processing Enabled
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Large Excel sheets (.xlsx) are parsed on the web server so your laptop and browser remain snappy.
+                </span>
+              </div>
+            </div>
+            <div className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-950/60 px-2.5 py-1 rounded-md shrink-0">
+              <Zap className="w-3 h-3 fill-current" />
+              <span>Zero Laptop Lag</span>
+            </div>
+          </div>
+
           <div
             onDragOver={(e) => {
               e.preventDefault();

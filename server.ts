@@ -3,9 +3,16 @@ import path from 'path';
 import dns from 'dns';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { processSpreadsheetOnServer } from './src/server/spreadsheetProcessor';
 
 const app = express();
 const PORT = 3000;
+
+// Mount raw body parser for server-side spreadsheet processing before standard JSON body parser
+app.use(
+  '/api/process-spreadsheet',
+  express.raw({ type: '*/*', limit: '50mb' })
+);
 
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
@@ -466,6 +473,111 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// High-capacity Server-Side Spreadsheet Processing
+// Offloads heavy XLSX parsing, ZIP decompression, column heuristics, and telephony classification
+// from the user's laptop browser to the dedicated web server
+app.post('/api/process-spreadsheet', async (req, res) => {
+  try {
+    let buffer: Buffer;
+    let fileName = 'spreadsheet.xlsx';
+    let targetSheetName: string | undefined;
+    let defaultCountryCode: string | undefined;
+    let autoVerify = false;
+
+    // Parse header parameters
+    if (req.headers['x-file-name']) {
+      try {
+        fileName = decodeURIComponent(req.headers['x-file-name'] as string);
+      } catch {
+        fileName = String(req.headers['x-file-name']);
+      }
+    }
+    if (req.headers['x-sheet-name']) {
+      try {
+        targetSheetName = decodeURIComponent(req.headers['x-sheet-name'] as string);
+      } catch {
+        targetSheetName = String(req.headers['x-sheet-name']);
+      }
+    }
+    if (req.headers['x-country-code']) {
+      defaultCountryCode = req.headers['x-country-code'] as string;
+    }
+    if (req.query.verify === 'true' || req.headers['x-auto-verify'] === 'true') {
+      autoVerify = true;
+    }
+
+    const contentType = req.headers['content-type'] || '';
+
+    if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+      if (contentType.includes('application/json')) {
+        try {
+          const jsonBody = JSON.parse(req.body.toString('utf-8'));
+          if (jsonBody.fileBase64) {
+            buffer = Buffer.from(jsonBody.fileBase64, 'base64');
+          } else {
+            return res.status(400).json({ error: 'Missing "fileBase64" in JSON payload.' });
+          }
+          if (jsonBody.fileName) fileName = jsonBody.fileName;
+          if (jsonBody.sheetName) targetSheetName = jsonBody.sheetName;
+          if (jsonBody.defaultCountryCode) defaultCountryCode = jsonBody.defaultCountryCode;
+          if (jsonBody.autoVerify) autoVerify = true;
+        } catch (jsonErr: any) {
+          return res.status(400).json({ error: 'Invalid JSON payload received', details: jsonErr.message });
+        }
+      } else {
+        buffer = req.body;
+      }
+    } else if (req.body && typeof req.body === 'object' && req.body.fileBase64) {
+      buffer = Buffer.from(req.body.fileBase64, 'base64');
+      if (req.body.fileName) fileName = req.body.fileName;
+      if (req.body.sheetName) targetSheetName = req.body.sheetName;
+      if (req.body.defaultCountryCode) defaultCountryCode = req.body.defaultCountryCode;
+      if (req.body.autoVerify) autoVerify = true;
+    } else {
+      return res.status(400).json({
+        error: 'No spreadsheet data received. Please provide a binary file stream or JSON base64.',
+      });
+    }
+
+    // Process on web server engine (Node.js)
+    const parsedData = processSpreadsheetOnServer(buffer, fileName, {
+      targetSheetName,
+      defaultCountryCode,
+    });
+
+    // Optional server verification on the same server process
+    if (autoVerify && parsedData.records.length > 0) {
+      const CONCURRENCY = 25;
+      const emails = parsedData.records.map((r) => r.currentEmail);
+      for (let i = 0; i < emails.length; i += CONCURRENCY) {
+        const chunk = emails.slice(i, i + CONCURRENCY);
+        const verifications = await Promise.all(
+          chunk.map(async (em) => {
+            try {
+              return await verifyEmail(em);
+            } catch {
+              return undefined;
+            }
+          })
+        );
+        verifications.forEach((v, idx) => {
+          if (v) {
+            parsedData.records[i + idx].verification = v;
+          }
+        });
+      }
+    }
+
+    return res.json(parsedData);
+  } catch (err: any) {
+    console.error('Server spreadsheet processing error:', err);
+    return res.status(500).json({
+      error: 'Failed to process spreadsheet on server',
+      details: err.message || 'Unknown processing error',
+    });
+  }
+});
+
 // Single email verification endpoint
 app.post('/api/verify-single', async (req, res) => {
   try {
@@ -489,7 +601,7 @@ app.post('/api/verify-batch', async (req, res) => {
       return res.status(400).json({ error: 'Field "emails" must be an array of strings.' });
     }
 
-    const CONCURRENCY_LIMIT = 15;
+    const CONCURRENCY_LIMIT = 25;
     const results = [];
 
     // Process in parallel chunks to maximize throughput without socket starvation

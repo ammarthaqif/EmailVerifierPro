@@ -153,39 +153,46 @@ function DashboardApp() {
   const runBatchVerification = useCallback(async (targetRecords: EmailRecord[]) => {
     if (targetRecords.length === 0) return;
 
+    // Filter to records that have not been tested or have an untested status
+    const pendingRecords = targetRecords.filter(
+      (r) => !r.verification || r.verification.status === 'untested'
+    );
+    if (pendingRecords.length === 0) return;
+
     setIsVerifying(true);
-    const totalToVerify = targetRecords.length;
+    const totalToVerify = pendingRecords.length;
     setProgress({ current: 0, total: totalToVerify });
 
-    const CHUNK_SIZE = 15;
-    const recordMap = new Map<string, EmailRecord>();
+    // Process in high-throughput chunks of 40 to minimize React re-render cycles
+    const CHUNK_SIZE = 40;
 
-    for (let i = 0; i < targetRecords.length; i += CHUNK_SIZE) {
-      const chunk = targetRecords.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < pendingRecords.length; i += CHUNK_SIZE) {
+      const chunk = pendingRecords.slice(i, i + CHUNK_SIZE);
       const emails = chunk.map((r) => r.currentEmail);
 
       try {
         const results = await verifyBatchSafe(emails);
+        const resultMap = new Map<string, VerificationResult>();
         chunk.forEach((rec, idx) => {
           const verification = results[idx];
           if (verification) {
-            recordMap.set(rec.id, {
-              ...rec,
-              verification,
-            });
+            resultMap.set(rec.id, verification);
           }
         });
+
+        // Targeted update: only re-map modified items, preventing laptop CPU freeze
+        setRecords((prev) =>
+          prev.map((r) => {
+            const v = resultMap.get(r.id);
+            return v ? { ...r, verification: v } : r;
+          })
+        );
       } catch (err) {
         console.error('Batch verification error:', err);
       }
 
       const completed = Math.min(i + CHUNK_SIZE, totalToVerify);
       setProgress({ current: completed, total: totalToVerify });
-
-      // Update state incrementally so UI renders progress smoothly
-      setRecords((prev) =>
-        prev.map((r) => (recordMap.has(r.id) ? recordMap.get(r.id)! : r))
-      );
     }
 
     setIsVerifying(false);
